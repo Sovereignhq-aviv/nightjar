@@ -53,6 +53,7 @@ import org.sovereignhq.sleepwave.ui.components.SectionLabel
 import org.sovereignhq.sleepwave.ui.components.StageLegend
 import org.sovereignhq.sleepwave.ui.components.StatTile
 import org.sovereignhq.sleepwave.ui.theme.DataColors
+import kotlin.math.roundToInt
 
 /**
  * Tonight's alarm above last night's sleep. One screen because they are the same question asked
@@ -247,7 +248,7 @@ private fun LastNight(vm: SleepViewModel, session: SleepSession) {
             endLabel = formatClock(session.endedAtMs)
         )
         Spacer(Modifier.height(14.dp))
-        StageLegend()
+        StageLegend(showRem = stats.remMinutes > 0)
     }
 
     SectionLabel("Breakdown")
@@ -261,6 +262,20 @@ private fun LastNight(vm: SleepViewModel, session: SleepSession) {
             StatTile("wake-ups", "${stats.awakenings}", modifier = Modifier.weight(1f))
             StatTile("of that, asleep", "${stats.efficiencyPct}%", modifier = Modifier.weight(1f))
         }
+        Spacer(Modifier.height(18.dp))
+        Row(Modifier.fillMaxWidth()) {
+            StatTile(
+                label = if (stats.remMinutes > 0) "REM (estimated)" else "REM",
+                value = if (stats.remMinutes > 0) formatDuration(stats.remMinutes) else "not detected",
+                tint = if (stats.remMinutes > 0) DataColors.stageRem else null,
+                modifier = Modifier.weight(1f)
+            )
+            StatTile(
+                label = "breathing",
+                value = if (stats.breathRate > 0f) "${stats.breathRate.roundToInt()}/min" else "-",
+                modifier = Modifier.weight(1f)
+            )
+        }
         if (stats.snoreMinutes > 0) {
             Spacer(Modifier.height(18.dp))
             StatTile("snoring", formatDuration(stats.snoreMinutes), DataColors.snore)
@@ -269,6 +284,18 @@ private fun LastNight(vm: SleepViewModel, session: SleepSession) {
             Spacer(Modifier.height(18.dp))
             StatTile("recordings", "${session.clips.size}", MaterialTheme.colorScheme.primary)
         }
+        Spacer(Modifier.height(14.dp))
+        Text(
+            text = if (stats.remMinutes > 0) {
+                "REM is worked out from how unsteady your breathing was while you lay still. It is " +
+                    "the least certain figure here - treat it as a hint, not a measurement."
+            } else {
+                "REM needs a clear breathing signal for most of the night. Move the phone closer, " +
+                    "or onto the mattress, and it may pick it up."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 
     SectionLabel("How do you feel?")

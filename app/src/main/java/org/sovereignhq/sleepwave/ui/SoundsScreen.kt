@@ -408,8 +408,23 @@ private fun ClipRow(
                 Text(
                     text = "  ${eventLabel(clip.eventKind)}",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (isCurrent) accent else MaterialTheme.colorScheme.onSurface
                 )
+                // The model's own word for it, which is far more specific than the bucket:
+                // "Fart", "Cough", "Air conditioning". Worth showing - it is how you discover
+                // that half the list is the fan.
+                val note = when {
+                    clip.wasCorrected -> "yours"
+                    clip.detail.isNotBlank() -> clip.detail
+                    else -> ""
+                }
+                if (note.isNotBlank()) {
+                    Text(
+                        text = "  $note",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Spacer(Modifier.weight(1f))
                 LoudnessBar(
                     peakAboveFloorDb = clip.peakDb,

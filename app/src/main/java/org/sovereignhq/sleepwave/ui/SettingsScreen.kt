@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import org.sovereignhq.sleepwave.audio.AudioSetLabels
 import org.sovereignhq.sleepwave.data.EventKind
 import org.sovereignhq.sleepwave.data.Sensitivity
 import org.sovereignhq.sleepwave.service.AlarmScheduler
@@ -163,6 +164,35 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
                     )
                 }
             }
+        }
+
+        SectionLabel("Teaching it")
+        NightCard {
+            val corrections = remember(vm.sessions) { vm.correctionCount() }
+            Text(
+                "Labels come from YAMNet, a model Google trained on two million sounds. It already " +
+                    "knows ${AudioSetLabels.recognisedCount} of the noises this app cares about by " +
+                    "name — including which ones are the air conditioning rather than you.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = when (corrections) {
+                    0 -> "When it gets one wrong, tap the label in the player and pick the right " +
+                        "one. Corrected clips are kept forever instead of being deleted after a " +
+                        "week, because they are what a model tuned to your bedroom would learn from."
+                    else -> "$corrections correction${if (corrections == 1) "" else "s"} saved so " +
+                        "far. Around 50 per kind is enough to train a version tuned to your " +
+                        "bedroom and the specific people in it."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (corrections > 0) {
+                    MaterialTheme.colorScheme.secondary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
         }
 
         // ---------------------------------------------------------------- alarm

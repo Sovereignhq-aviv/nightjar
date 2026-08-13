@@ -35,6 +35,7 @@ private val IndigoDeep = Color(0xFF3B5BDB)
 private val Mint = Color(0xFF6EE7B7)
 private val Amber = Color(0xFFF7B267)
 private val Rose = Color(0xFFF08A8A)
+private val Cyan = Color(0xFF5EC8D8)
 
 private val Ink = Color(0xFFEAECF8)      // body text, 15.8:1 on Ink0
 private val InkMuted = Color(0xFF9AA2C4) // secondary text, 7.1:1 on Ink0 - not a light gray
@@ -72,6 +73,9 @@ object DataColors {
     val stageAwake = Amber
     val stageLight = Indigo
     val stageDeep = IndigoDeep
+
+    /** Its own hue, not a tint of light or deep, because it is a genuinely separate state. */
+    val stageRem = Cyan
 
     val snore = Indigo
     val voice = Mint

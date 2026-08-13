@@ -12,3 +12,4 @@ captures/
 *.keystore
 !debug.keystore
 out/
+app/src/main/assets/yamnet.tflite

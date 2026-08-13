@@ -27,7 +27,9 @@ import kotlin.math.sqrt
  */
 class NightRecorder(
     private val clipsDir: File,
-    private val listener: Listener
+    private val listener: Listener,
+    /** Optional. Absent means the caller's own guess at the kind is kept as-is. */
+    private val classifier: ClipClassifier? = null
 ) {
 
     interface Listener {
@@ -38,7 +40,10 @@ class NightRecorder(
             durationMs: Long,
             kind: String,
             peakDb: Float,
-            envelope: List<Int>
+            envelope: List<Int>,
+            /** The model's specific label, or empty when no model weighed in. */
+            detail: String,
+            confidence: Float
         )
         fun onError(message: String)
     }
@@ -263,16 +268,30 @@ class NightRecorder(
 
         val clipStartMs = startedAtMs + (from * 1000L / SAMPLE_RATE)
         val durationMs = count * 1000L / SAMPLE_RATE
-        val name = "${kind.lowercase()}_$clipStartMs.wav"
 
         if (diskWriter.isShutdown) return
         diskWriter.execute {
             try {
+                // The model only ever sees clips that were already worth saving, and it runs on the
+                // disk-writer thread so the microphone loop is never blocked by inference.
+                val verdict = classifier?.classify(copy, count)
+                val finalKind = verdict?.kind?.name ?: kind
+                val name = "${finalKind.lowercase()}_$clipStartMs.wav"
+
                 clipsDir.mkdirs()
                 WavWriter.write(File(clipsDir, name), copy, count, SAMPLE_RATE)
-                listener.onClipSaved(name, clipStartMs, durationMs, kind, peak, envelopeOf(copy, count))
+                listener.onClipSaved(
+                    fileName = name,
+                    startedAtMs = clipStartMs,
+                    durationMs = durationMs,
+                    kind = finalKind,
+                    peakDb = peak,
+                    envelope = envelopeOf(copy, count),
+                    detail = verdict?.label ?: "",
+                    confidence = verdict?.confidence ?: 0f
+                )
             } catch (e: Exception) {
-                Log.e(TAG, "Could not write clip $name", e)
+                Log.e(TAG, "Could not write clip at $clipStartMs", e)
             }
         }
     }
@@ -303,7 +322,8 @@ class NightRecorder(
 
     companion object {
         const val SAMPLE_RATE = 16_000
-        const val FRAME = 512                 // 32 ms per frame
+        const val FRAME = 512
+        const val FRAME_MS = FRAME * 1000L / SAMPLE_RATE   // 32 ms
         const val ENVELOPE_BUCKETS = 120
 
         /** Audio kept before the trigger, so a clip opens with the sound that caused it. */

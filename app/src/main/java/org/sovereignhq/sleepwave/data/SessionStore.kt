@@ -59,6 +59,21 @@ class SessionStore(context: Context) {
         return updated
     }
 
+    /**
+     * Records a human correction, and stars the clip in the same move. Starring is not a courtesy:
+     * corrected clips are the training data for a personalised model, and unstarred audio is deleted
+     * within days, so a correction that did not survive would be worthless.
+     */
+    fun setUserLabel(session: SleepSession, fileName: String, label: String): SleepSession {
+        val updated = session.copy(
+            clips = session.clips.map {
+                if (it.fileName == fileName) it.copy(userLabel = label, starred = true) else it
+            }
+        )
+        save(updated)
+        return updated
+    }
+
     fun deleteClip(session: SleepSession, fileName: String): SleepSession {
         runCatching { clipFile(fileName).delete() }
         val updated = session.copy(clips = session.clips.filterNot { it.fileName == fileName })

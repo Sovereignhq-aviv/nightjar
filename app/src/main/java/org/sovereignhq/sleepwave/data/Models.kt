@@ -3,11 +3,13 @@ package org.sovereignhq.sleepwave.data
 import kotlinx.serialization.Serializable
 
 /**
- * Three-way sleep staging. We deliberately do NOT claim to separate REM from light sleep:
- * telling them apart needs heart-rate or EEG data that a phone on a nightstand does not have.
- * REM shows up inside LIGHT.
+ * Sleep stages.
+ *
+ * REM is appended rather than inserted in physiological order on purpose: the ordinal is what gets
+ * written into saved sessions, so putting REM between AWAKE and LIGHT would silently turn every
+ * previously recorded light minute into deep sleep. Drawing order lives in the hypnogram instead.
  */
-enum class Stage { AWAKE, LIGHT, DEEP }
+enum class Stage { AWAKE, LIGHT, DEEP, REM }
 
 /**
  * What kind of noise a recording turned out to be.
@@ -32,8 +34,7 @@ enum class EventKind {
     OTHER;
 
     companion object {
-        fun from(name: String): EventKind =
-            entries.firstOrNull { it.name == name } ?: OTHER
+        fun from(name: String): EventKind = entries.firstOrNull { it.name == name } ?: OTHER
     }
 }
 
@@ -48,30 +49,46 @@ data class Sample(
     /** [Stage] ordinal, assigned once the whole night is known. */
     val stage: Int = Stage.LIGHT.ordinal,
     /** True when a snore burst was confirmed inside this minute. */
-    val snoring: Boolean = false
+    val snoring: Boolean = false,
+    /** Breaths per minute measured from the low-frequency envelope. 0 when nothing was detectable. */
+    val breathRate: Float = 0f,
+    /**
+     * How steady the breathing was, 0..1. High means metronomic, which is deep sleep; low with
+     * little movement is the signature of REM.
+     */
+    val breathRegularity: Float = 0f
 )
 
-/**
- * A recorded clip sitting in the app's private clips/ folder.
- *
- * [envelope] is computed once when the WAV is written: 0-100 loudness buckets across the clip.
- * Storing it means the list can draw a real waveform for 120 rows without opening a single audio
- * file, which is the difference between a list that scrolls and one that stutters.
- */
+/** A recorded clip sitting in the app's private clips/ folder. */
 @Serializable
 data class SoundClip(
     val fileName: String,
     val startedAtMs: Long,
     val durationMs: Long,
-    /** [EventKind] name. */
+    /** [EventKind] name, as decided by the classifier or the fallback heuristic. */
     val kind: String,
     /** Peak loudness, in dB above the room's background level. */
     val peakDb: Float,
     val envelope: List<Int> = emptyList(),
     /** Starred clips are never auto-deleted. */
-    val starred: Boolean = false
+    val starred: Boolean = false,
+    /**
+     * The trained model's own label, far more specific than [kind] - "Fart", "Cough", "Snoring",
+     * "Speech". Empty when the model was unavailable and the heuristic decided alone.
+     */
+    val detail: String = "",
+    /** The model's confidence in [detail], 0..1. */
+    val confidence: Float = 0f,
+    /**
+     * Set when the listener corrected the label. Overrides [kind] everywhere, and is the training
+     * data for a personalised model, which is why corrected clips are starred automatically.
+     */
+    val userLabel: String? = null
 ) {
-    val eventKind: EventKind get() = EventKind.from(kind)
+    /** What to show and filter by: the human's correction wins over any machine's guess. */
+    val eventKind: EventKind get() = EventKind.from(userLabel ?: kind)
+
+    val wasCorrected: Boolean get() = userLabel != null
 }
 
 @Serializable
@@ -93,9 +110,6 @@ data class SleepSession(
     /** How the user says they feel, 0 = unrated, 1..5 stars. */
     val ratingStars: Int = 0
 ) {
-    /** Clips whose audio file has been pruned are kept out of the library. */
-    fun clipsNewestFirst(): List<SoundClip> = clips.sortedByDescending { it.startedAtMs }
-
     fun loudestClips(limit: Int): List<SoundClip> =
         clips.sortedByDescending { it.peakDb }.take(limit)
 }
@@ -106,12 +120,15 @@ data class SessionStats(
     val asleepMinutes: Int,
     val deepMinutes: Int,
     val lightMinutes: Int,
+    val remMinutes: Int,
     val awakeMinutes: Int,
     val awakenings: Int,
     val sleepOnsetMinutes: Int,
     val efficiencyPct: Int,
     val score: Int,
-    val snoreMinutes: Int
+    val snoreMinutes: Int,
+    /** Average breaths per minute across the minutes where breathing was detectable. */
+    val breathRate: Float
 ) {
     val deepFraction: Float get() = if (asleepMinutes > 0) deepMinutes.toFloat() / asleepMinutes else 0f
 }

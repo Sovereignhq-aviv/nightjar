@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ArrowDropDown
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -29,15 +31,22 @@ import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import org.sovereignhq.sleepwave.data.EventKind
 import org.sovereignhq.sleepwave.data.SoundClip
 import org.sovereignhq.sleepwave.ui.eventLabel
 import org.sovereignhq.sleepwave.ui.formatClock
@@ -65,8 +74,11 @@ fun DockedPlayer(
     onToggleStar: () -> Unit,
     onShare: () -> Unit,
     onClose: () -> Unit,
+    onCorrectLabel: (EventKind) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var menuOpen by remember { mutableStateOf(false) }
+
     AnimatedVisibility(
         visible = clip != null,
         enter = slideInVertically(animationSpec = tween(220)) { it } + fadeIn(tween(220)),
@@ -92,13 +104,73 @@ fun DockedPlayer(
                         .background(accent)
                 )
                 Spacer(Modifier.width(8.dp))
+
+                // The label is a control, not a caption: tapping it corrects a wrong guess, and
+                // every correction becomes a labelled example for a personalised model later.
+                Box {
+                    Row(
+                        Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { menuOpen = true }
+                            .padding(horizontal = 4.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = eventLabel(shown.eventKind),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = accent
+                        )
+                        Icon(
+                            Icons.Rounded.ArrowDropDown,
+                            contentDescription = "Change the label",
+                            tint = accent,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        Text(
+                            text = "What was it really?",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                        )
+                        EventKind.entries.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(eventLabel(option)) },
+                                onClick = {
+                                    menuOpen = false
+                                    onCorrectLabel(option)
+                                },
+                                leadingIcon = {
+                                    Box(
+                                        Modifier
+                                            .size(10.dp)
+                                            .clip(CircleShape)
+                                            .background(DataColors.forEvent(option))
+                                    )
+                                },
+                                trailingIcon = {
+                                    if (option == shown.eventKind) {
+                                        Icon(
+                                            Icons.Rounded.Check,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+
                 Text(
-                    text = eventLabel(shown.eventKind),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = accent
-                )
-                Text(
-                    text = "  ·  ${formatClock(shown.startedAtMs)}  ·  ${shown.durationMs / 1000}s",
+                    text = buildString {
+                        append("  ·  ${formatClock(shown.startedAtMs)}")
+                        when {
+                            shown.wasCorrected -> append("  ·  you relabelled this")
+                            shown.detail.isNotBlank() -> append("  ·  ${shown.detail}")
+                        }
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -13,6 +13,7 @@ import android.util.Log
 import org.sovereignhq.sleepwave.alarm.AlarmPlayer
 import org.sovereignhq.sleepwave.audio.EventDetector
 import org.sovereignhq.sleepwave.audio.NightRecorder
+import org.sovereignhq.sleepwave.audio.YamnetClassifier
 import org.sovereignhq.sleepwave.data.EventKind
 import org.sovereignhq.sleepwave.data.Sample
 import org.sovereignhq.sleepwave.data.SessionStore
@@ -21,6 +22,7 @@ import org.sovereignhq.sleepwave.data.SleepSession
 import org.sovereignhq.sleepwave.data.SoundClip
 import org.sovereignhq.sleepwave.sensor.MotionMonitor
 import org.sovereignhq.sleepwave.sleep.ActivityAggregator
+import org.sovereignhq.sleepwave.sleep.BreathEstimator
 import org.sovereignhq.sleepwave.sleep.SleepClassifier
 import org.sovereignhq.sleepwave.sleep.SmartAlarm
 import java.util.concurrent.CopyOnWriteArrayList
@@ -47,7 +49,9 @@ class SleepService : Service(), NightRecorder.Listener, EventDetector.Listener {
     private lateinit var motion: MotionMonitor
     private lateinit var player: AlarmPlayer
 
+    private var soundClassifier: YamnetClassifier? = null
     private val aggregator = ActivityAggregator()
+    private var breath = BreathEstimator()
     private val samples = CopyOnWriteArrayList<Sample>()
     private val clips = CopyOnWriteArrayList<SoundClip>()
     private val main = Handler(Looper.getMainLooper())
@@ -75,7 +79,9 @@ class SleepService : Service(), NightRecorder.Listener, EventDetector.Listener {
         isRunning = true
         settings = Settings(this)
         store = SessionStore(this)
-        recorder = NightRecorder(store.clipsDir, this)
+        // Null when the model asset is absent; the recorder then keeps the heuristic's label.
+        soundClassifier = YamnetClassifier.createOrNull(this)
+        recorder = NightRecorder(store.clipsDir, this, soundClassifier)
         detector = EventDetector(settings.sensitivity.triggerDb, this)
         motion = MotionMonitor(this)
         player = AlarmPlayer(this)
@@ -109,6 +115,7 @@ class SleepService : Service(), NightRecorder.Listener, EventDetector.Listener {
         nextMinuteBoundaryMs = startedAtMs + 60_000
         maxClips = sensitivity.maxClipsPerNight
         detector = EventDetector(sensitivity.triggerDb, this)
+        breath = BreathEstimator()
         samples.clear()
         clips.clear()
         snoreMinutes = 0
@@ -173,6 +180,7 @@ class SleepService : Service(), NightRecorder.Listener, EventDetector.Listener {
 
         aggregator.onFrame(frame)
         detector.onFrame(frame)
+        breath.onFrame(frame)
         SleepState.setLevel(recorder.lastLevel)
 
         // Catch up if a boundary was somehow missed, but never spin: at most a few minutes.
@@ -189,7 +197,9 @@ class SleepService : Service(), NightRecorder.Listener, EventDetector.Listener {
         durationMs: Long,
         kind: String,
         peakDb: Float,
-        envelope: List<Int>
+        envelope: List<Int>,
+        detail: String,
+        confidence: Float
     ) {
         clips.add(
             SoundClip(
@@ -198,7 +208,9 @@ class SleepService : Service(), NightRecorder.Listener, EventDetector.Listener {
                 durationMs = durationMs,
                 kind = kind,
                 peakDb = peakDb,
-                envelope = envelope
+                envelope = envelope,
+                detail = detail,
+                confidence = confidence
             )
         )
         SleepState.setClipCount(clips.size)
@@ -238,12 +250,15 @@ class SleepService : Service(), NightRecorder.Listener, EventDetector.Listener {
             if (settings.motionSensing && motion.available) motion.drain() else 0 to 0f
 
         val result = aggregator.closeMinute(motionCount, motionPeak)
+        val breathing = breath.estimate()
         samples.add(
             Sample(
                 minute = samples.size,
                 activity = result.activity,
                 loudnessDb = result.peakDb,
-                snoring = result.snoring
+                snoring = result.snoring,
+                breathRate = breathing.ratePerMinute,
+                breathRegularity = breathing.regularity
             )
         )
         if (result.snoring) snoreMinutes++
@@ -437,6 +452,8 @@ class SleepService : Service(), NightRecorder.Listener, EventDetector.Listener {
         }
         player.stop()
         releaseWakeLock()
+        soundClassifier?.close()
+        soundClassifier = null
         SleepState.setAlarmRinging(false)
         isRunning = false
         super.onDestroy()

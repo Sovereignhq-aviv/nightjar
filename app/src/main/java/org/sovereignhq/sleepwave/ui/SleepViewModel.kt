@@ -115,6 +115,14 @@ class SleepViewModel(app: Application) : AndroidViewModel(app) {
         player.play(reel.first(), reel)
     }
 
+    /** A correction. Also the only way a personalised model will ever get labelled examples. */
+    fun correctLabel(session: SleepSession, clip: SoundClip, kind: EventKind) {
+        replace(store.setUserLabel(session, clip.fileName, kind.name))
+    }
+
+    /** How many corrections exist across every night - the size of the training set so far. */
+    fun correctionCount(): Int = sessions.sumOf { night -> night.clips.count { it.wasCorrected } }
+
     fun toggleStar(session: SleepSession, clip: SoundClip) {
         val updated = store.setStarred(session, clip.fileName, !clip.starred)
         replace(updated)

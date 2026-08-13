@@ -54,9 +54,11 @@ fun Hypnogram(
         val plotHeight = size.height - ribbonHeight - snoreLane - 4f * density
         val step = size.width / max(1, samples.size - 1)
 
+        // Drawing order, not enum order: awake at the top, then REM, light, deep going down.
         fun levelOf(stage: Int): Float = when (stage) {
             Stage.AWAKE.ordinal -> 0.03f
-            Stage.LIGHT.ordinal -> 0.45f
+            Stage.REM.ordinal -> 0.26f
+            Stage.LIGHT.ordinal -> 0.52f
             else -> 0.88f
         }
 
@@ -103,6 +105,7 @@ fun Hypnogram(
             drawRect(
                 color = when (s.stage) {
                     Stage.AWAKE.ordinal -> DataColors.stageAwake
+                    Stage.REM.ordinal -> DataColors.stageRem
                     Stage.LIGHT.ordinal -> DataColors.stageLight
                     else -> DataColors.stageDeep
                 },
@@ -143,9 +146,10 @@ fun HypnogramAxis(startLabel: String, endLabel: String, modifier: Modifier = Mod
 }
 
 @Composable
-fun StageLegend(modifier: Modifier = Modifier) {
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+fun StageLegend(modifier: Modifier = Modifier, showRem: Boolean = false) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         LegendDot(DataColors.stageAwake, "Awake")
+        if (showRem) LegendDot(DataColors.stageRem, "REM")
         LegendDot(DataColors.stageLight, "Light")
         LegendDot(DataColors.stageDeep, "Deep")
     }

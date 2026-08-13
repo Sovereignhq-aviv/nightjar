@@ -19,9 +19,25 @@ android {
         versionName = "1.0"
     }
 
+    signingConfigs {
+        getByName("debug") {
+            // A committed, non-secret debug key. Without a fixed key every build would be signed
+            // differently, and Android refuses to install a differently-signed APK over an existing
+            // one - the only way forward would be uninstalling, which deletes every recording.
+            val committed = rootProject.file("debug.keystore")
+            if (committed.exists()) {
+                storeFile = committed
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
         }
         release {
             isMinifyEnabled = false
@@ -64,6 +80,9 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
+
+    // YAMNet on-device: Google's AudioSet-trained sound classifier, ~4MB, runs in real time.
+    implementation("com.google.mediapipe:tasks-audio:0.10.14")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")

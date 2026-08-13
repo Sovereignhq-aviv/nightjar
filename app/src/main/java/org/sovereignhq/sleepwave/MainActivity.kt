@@ -188,7 +188,11 @@ private fun SleepWaveApp() {
                             context.startActivity(Intent.createChooser(intent, "Share recording"))
                         }
                     },
-                    onClose = { vm.player.stop() }
+                    onClose = { vm.player.stop() },
+                    onCorrectLabel = { kind ->
+                        val clip = vm.player.current
+                        if (session != null && clip != null) vm.correctLabel(session, clip, kind)
+                    }
                 )
                 Spacer(Modifier.height(8.dp))
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
