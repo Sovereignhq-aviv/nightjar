@@ -253,7 +253,7 @@ private fun FilterRow(vm: SleepViewModel, counts: Map<EventKind, Int>) {
                 selected = vm.starredOnly,
                 accent = DataColors.rumble,
                 leadingStar = true,
-                onClick = { vm.setStarredOnly(!vm.starredOnly) }
+                onClick = { vm.toggleStarredOnly() }
             )
         }
         items(EventKind.entries.filter { (counts[it] ?: 0) > 0 }) { kind ->
@@ -263,7 +263,7 @@ private fun FilterRow(vm: SleepViewModel, counts: Map<EventKind, Int>) {
                 selected = vm.kindFilter == kind,
                 accent = DataColors.forEvent(kind),
                 leadingStar = false,
-                onClick = { vm.setKindFilter(kind) }
+                onClick = { vm.toggleKindFilter(kind) }
             )
         }
     }
@@ -343,7 +343,7 @@ private fun SortRow(vm: SleepViewModel, shown: Int) {
                             if (selected) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.surfaceVariant
                         )
-                        .clickable { vm.setSort(option) }
+                        .clickable { vm.chooseSort(option) }
                         .padding(horizontal = 14.dp, vertical = 10.dp)
                 ) {
                     Text(

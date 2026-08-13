@@ -95,13 +95,16 @@ class SleepViewModel(app: Application) : AndroidViewModel(app) {
     fun countsByKind(session: SleepSession?): Map<EventKind, Int> =
         session?.clips?.groupingBy { it.eventKind }?.eachCount() ?: emptyMap()
 
-    fun setSort(value: ClipSort) { sort = value }
+    // Named for what they do rather than as setX(), which would collide with the JVM setters
+    // Compose generates for the properties above.
+    fun chooseSort(value: ClipSort) { sort = value }
 
-    fun setKindFilter(value: EventKind?) {
+    /** Tapping the active filter clears it. */
+    fun toggleKindFilter(value: EventKind) {
         kindFilter = if (kindFilter == value) null else value
     }
 
-    fun setStarredOnly(value: Boolean) { starredOnly = value }
+    fun toggleStarredOnly() { starredOnly = !starredOnly }
 
     fun playClip(clip: SoundClip, queue: List<SoundClip>) = player.toggle(clip, queue)
 
