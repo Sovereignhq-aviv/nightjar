@@ -59,10 +59,11 @@ class BreathEstimator {
         val energy = signal.sumOf { (it * it).toDouble() }
         if (energy < MIN_ENERGY) return Breathing.NONE
 
-        var bestLag = -1
-        var bestScore = 0f
-        for (lag in MIN_LAG..MAX_LAG) {
-            if (lag >= available) break
+        val scores = FloatArray(MAX_LAG + 1)
+        var peakScore = 0f
+        val highestLag = minOf(MAX_LAG, available - 1)
+
+        for (lag in MIN_LAG..highestLag) {
             var dot = 0.0
             var normA = 0.0
             var normB = 0.0
@@ -76,13 +77,27 @@ class BreathEstimator {
             val denominator = sqrt(normA * normB)
             if (denominator <= 0.0) continue
             val score = (dot / denominator).toFloat()
-            if (score > bestScore) {
-                bestScore = score
+            scores[lag] = score
+            if (score > peakScore) peakScore = score
+        }
+
+        if (peakScore < MIN_CORRELATION) return Breathing.NONE
+
+        // Octave correction. A periodic signal correlates just as strongly with two, three or four
+        // of its own periods, so taking the highest correlation outright can report half or a third
+        // of the real breathing rate. Taking the SHORTEST lag that is within a whisker of the best
+        // picks the fundamental instead of a multiple of it.
+        var bestLag = -1
+        val acceptable = peakScore * OCTAVE_TOLERANCE
+        for (lag in MIN_LAG..highestLag) {
+            if (scores[lag] >= acceptable) {
                 bestLag = lag
+                break
             }
         }
 
-        if (bestLag < 0 || bestScore < MIN_CORRELATION) return Breathing.NONE
+        if (bestLag < 0) return Breathing.NONE
+        val bestScore = scores[bestLag]
 
         val periodSeconds = bestLag / SAMPLES_PER_SECOND
         val rate = 60f / periodSeconds
@@ -118,5 +133,8 @@ class BreathEstimator {
         const val MIN_ENERGY = 1e-8
         /** Below this the "period" found is noise, not a breath. */
         const val MIN_CORRELATION = 0.30f
+
+        /** How close to the peak a shorter lag must be to be preferred as the fundamental. */
+        const val OCTAVE_TOLERANCE = 0.90f
     }
 }

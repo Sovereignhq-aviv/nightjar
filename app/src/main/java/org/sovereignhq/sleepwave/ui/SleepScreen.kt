@@ -1,6 +1,5 @@
 package org.sovereignhq.sleepwave.ui
 
-import android.app.TimePickerDialog
 import android.content.Context
 import android.os.PowerManager
 import androidx.compose.foundation.background
@@ -44,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import org.sovereignhq.sleepwave.data.ALL_TAGS
 import org.sovereignhq.sleepwave.data.SleepSession
 import org.sovereignhq.sleepwave.service.AlarmScheduler
+import org.sovereignhq.sleepwave.ui.components.AlarmDial
 import org.sovereignhq.sleepwave.ui.components.EmptyState
 import org.sovereignhq.sleepwave.ui.components.Hypnogram
 import org.sovereignhq.sleepwave.ui.components.HypnogramAxis
@@ -94,35 +94,27 @@ fun SleepScreen(
                 )
             }
 
-            Text(
-                text = formatHourMinute(settings.alarmHour, settings.alarmMinute),
-                style = MaterialTheme.typography.displayLarge,
-                color = if (settings.alarmEnabled) {
-                    MaterialTheme.colorScheme.onSurface
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
+            Spacer(Modifier.height(10.dp))
+
+            AlarmDial(
+                hour = settings.alarmHour,
+                minute = settings.alarmMinute,
+                windowMinutes = settings.windowMinutes,
+                enabled = settings.alarmEnabled,
+                onChange = { h, m ->
+                    vm.updateSettings { copy(alarmHour = h, alarmMinute = m) }
                 },
-                modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable {
-                        TimePickerDialog(
-                            context,
-                            { _, hour, minute ->
-                                vm.updateSettings { copy(alarmHour = hour, alarmMinute = minute) }
-                            },
-                            settings.alarmHour,
-                            settings.alarmMinute,
-                            true
-                        ).show()
-                    }
-                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                modifier = Modifier.align(Alignment.CenterHorizontally)
             )
+
+            Spacer(Modifier.height(20.dp))
 
             Text(
                 text = if (settings.windowMinutes > 0) {
-                    "Wakes you in light sleep, up to ${settings.windowMinutes} minutes early"
+                    "The band on the dial is when it might wake you - it picks the lightest moment " +
+                        "inside it."
                 } else {
-                    "Rings exactly on time - no smart window"
+                    "Rings exactly on time. No smart window."
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
