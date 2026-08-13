@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -200,8 +201,9 @@ private fun SleepWaveApp() {
     }
 }
 
+/** NavigationBarItem is a RowScope extension, so this wrapper has to be one too. */
 @Composable
-private fun NavBarItem(
+private fun RowScope.NavBarItem(
     target: Tab,
     current: Tab,
     label: String,

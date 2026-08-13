@@ -85,6 +85,11 @@ class AlarmActivity : ComponentActivity() {
             }
         }
     }
+
+    companion object {
+        /** Set by the alarm backstop, meaning "the service was gone, you are the entry point". */
+        const val ACTION_RESCUE = "org.sovereignhq.sleepwave.RESCUE"
+    }
 }
 
 @Composable
