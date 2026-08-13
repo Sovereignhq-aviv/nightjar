@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">SleepWave</string>
+    <string name="channel_tracking_name">Sleep tracking</string>
+    <string name="channel_tracking_desc">Shows while SleepWave is listening overnight.</string>
+    <string name="channel_alarm_name">Alarm</string>
+    <string name="channel_alarm_desc">Your wake-up alarm.</string>
+</resources>

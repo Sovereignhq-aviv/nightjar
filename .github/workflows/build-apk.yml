@@ -1,0 +1,59 @@
+name: Build APK
+
+# Builds an installable APK in the cloud on every push, so nothing needs to be
+# installed locally. The finished file is attached to the run as an artifact.
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install the platform this app targets
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+
+      # Pinned rather than using whatever Gradle the runner ships, because Android
+      # Gradle Plugin 8.7 is only compatible with a known Gradle range.
+      - name: Set up Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Run the engine tests
+        run: gradle testDebugUnitTest --no-daemon --stacktrace
+
+      - name: Build the debug APK
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Rename for clarity
+        run: |
+          mkdir -p out
+          cp app/build/outputs/apk/debug/app-debug.apk out/SleepWave.apk
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SleepWave-apk
+          path: out/SleepWave.apk
+          if-no-files-found: error
+
+      - name: Upload test report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: app/build/reports/tests/
+          if-no-files-found: ignore
