@@ -25,8 +25,11 @@ Nothing needs to be installed on your PC. GitHub builds the app in the cloud.
 
 1. Open **Actions** → the newest green run → scroll to **Artifacts** → download **SleepWave-apk**.
    You get a zip with `SleepWave.apk` inside (about 16 MB).
-2. Send that APK to the phone — email it to yourself, or drop it in Google Drive and open it there.
-3. Tap it on the phone. Android will ask permission to install from that app; allow it once.
+2. Get the APK onto the phone via **Google Drive** or a **USB cable**. Not email — Gmail blocks
+   `.apk` attachments outright.
+3. Open it on the phone. Android will refuse the first time with "your phone isn't allowed to install
+   unknown apps from this source" — tap **Settings** in that dialog, turn on **Allow from this
+   source**, press Back, then **Install**. This is only needed once per app you open APKs with.
 
 Every push rebuilds automatically, so changing something means: push, wait about three minutes,
 download, install over the top.
