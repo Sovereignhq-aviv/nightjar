@@ -21,10 +21,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import org.sovereignhq.sleepwave.ui.theme.NightBorder
-import org.sovereignhq.sleepwave.ui.theme.NightSurface
-import org.sovereignhq.sleepwave.ui.theme.TextMuted
 
+/** Tonal container. Used for grouped panels, never nested inside another one. */
 @Composable
 fun NightCard(
     modifier: Modifier = Modifier,
@@ -35,7 +33,7 @@ fun NightCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(NightSurface)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(padding.dp),
         content = content
     )
@@ -44,9 +42,9 @@ fun NightCard(
 @Composable
 fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(
-        text = text.uppercase(),
-        style = MaterialTheme.typography.labelSmall,
-        color = TextMuted,
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier
     )
 }
@@ -62,7 +60,7 @@ fun StatTile(label: String, value: String, tint: Color? = null, modifier: Modifi
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
-            color = TextMuted
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
@@ -79,29 +77,36 @@ fun LegendDot(color: Color, label: String) {
         Text(
             text = "  $label",
             style = MaterialTheme.typography.bodyMedium,
-            color = TextMuted
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
 
+/** Empty states teach the screen rather than announcing that it is empty. */
 @Composable
-fun EmptyState(title: String, body: String, modifier: Modifier = Modifier) {
+fun EmptyState(
+    title: String,
+    body: String,
+    modifier: Modifier = Modifier,
+    action: (@Composable () -> Unit)? = null
+) {
     Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(NightSurface)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text(title, style = MaterialTheme.typography.titleMedium)
+        Text(title, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
         Text(
             body,
             style = MaterialTheme.typography.bodyMedium,
-            color = TextMuted,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
+        action?.invoke()
     }
 }
 
@@ -111,6 +116,6 @@ fun HairLine(modifier: Modifier = Modifier) {
         modifier
             .fillMaxWidth()
             .height(1.dp)
-            .background(NightBorder)
+            .background(MaterialTheme.colorScheme.outlineVariant)
     )
 }

@@ -34,10 +34,7 @@ import kotlinx.coroutines.delay
 import org.sovereignhq.sleepwave.service.SleepService
 import org.sovereignhq.sleepwave.service.SleepState
 import org.sovereignhq.sleepwave.ui.formatClock
-import org.sovereignhq.sleepwave.ui.theme.Indigo
-import org.sovereignhq.sleepwave.ui.theme.NightBg
 import org.sovereignhq.sleepwave.ui.theme.SleepWaveTheme
-import org.sovereignhq.sleepwave.ui.theme.TextMuted
 
 /**
  * The wake-up screen. Appears over the lock screen and turns the display on.
@@ -105,19 +102,23 @@ private fun AlarmScreen(onSnooze: () -> Unit, onStop: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(NightBg)
+            .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text("Good morning", style = MaterialTheme.typography.titleLarge, color = TextMuted)
+        Text(
+            "Good morning",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         Spacer(Modifier.height(8.dp))
         Text(formatClock(now), style = MaterialTheme.typography.displayLarge)
         Spacer(Modifier.height(12.dp))
         Text(
-            "Your night is saved. Open SleepWave to see it.",
+            "Your night is saved. Open SleepWave to hear what it caught.",
             style = MaterialTheme.typography.bodyMedium,
-            color = TextMuted,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
 
@@ -128,14 +129,9 @@ private fun AlarmScreen(onSnooze: () -> Unit, onStop: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(66.dp),
-            shape = RoundedCornerShape(18.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Indigo)
+            shape = RoundedCornerShape(18.dp)
         ) {
-            Text(
-                "I'm up",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onPrimary
-            )
+            Text("I'm up", style = MaterialTheme.typography.titleLarge)
         }
 
         Spacer(Modifier.height(12.dp))
@@ -147,7 +143,11 @@ private fun AlarmScreen(onSnooze: () -> Unit, onStop: () -> Unit) {
                 .height(58.dp),
             shape = RoundedCornerShape(18.dp)
         ) {
-            Text("Snooze", style = MaterialTheme.typography.titleMedium, color = TextMuted)
+            Text(
+                "Snooze",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

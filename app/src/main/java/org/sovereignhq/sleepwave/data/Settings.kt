@@ -4,6 +4,42 @@ import android.content.Context
 import android.content.SharedPreferences
 import java.util.Calendar
 
+/**
+ * How eagerly the app saves a recording.
+ *
+ * [triggerDb] is measured against the room's own background level, not an absolute volume, so the
+ * same setting behaves the same in a city flat and a quiet cottage.
+ */
+enum class Sensitivity(
+    val label: String,
+    val triggerDb: Float,
+    val maxClipsPerNight: Int,
+    val blurb: String
+) {
+    LOOSE(
+        label = "Catch a lot",
+        triggerDb = 12f,
+        maxClipsPerNight = 120,
+        blurb = "Picks up quiet rumbles and mumbling. Also picks up traffic and the air conditioning."
+    ),
+    BALANCED(
+        label = "Balanced",
+        triggerDb = 16f,
+        maxClipsPerNight = 60,
+        blurb = "Clear snoring, talking and obvious outbursts. Misses the quiet ones."
+    ),
+    STRICT(
+        label = "Only the obvious",
+        triggerDb = 22f,
+        maxClipsPerNight = 30,
+        blurb = "Loud and unmistakable only. Almost never a false alarm."
+    );
+
+    companion object {
+        fun from(name: String): Sensitivity = entries.firstOrNull { it.name == name } ?: LOOSE
+    }
+}
+
 /** Plain SharedPreferences. Small enough that a reactive store would be more code than value. */
 class Settings(context: Context) {
 
@@ -22,7 +58,7 @@ class Settings(context: Context) {
         get() = prefs.getInt("alarm_minute", 0)
         set(v) = prefs.edit().putInt("alarm_minute", v).apply()
 
-    /** How far before [alarmHour]:[alarmMinute] the smart alarm may wake you. */
+    /** How far before the alarm time the smart alarm may wake you. */
     var windowMinutes: Int
         get() = prefs.getInt("window_minutes", 30)
         set(v) = prefs.edit().putInt("window_minutes", v).apply()
@@ -35,9 +71,13 @@ class Settings(context: Context) {
         get() = prefs.getInt("sleep_goal_minutes", 8 * 60)
         set(v) = prefs.edit().putInt("sleep_goal_minutes", v).apply()
 
-    var recordSnoring: Boolean
-        get() = prefs.getBoolean("record_snoring", true)
-        set(v) = prefs.edit().putBoolean("record_snoring", v).apply()
+    var recordSounds: Boolean
+        get() = prefs.getBoolean("record_sounds", true)
+        set(v) = prefs.edit().putBoolean("record_sounds", v).apply()
+
+    var sensitivity: Sensitivity
+        get() = Sensitivity.from(prefs.getString("sensitivity", Sensitivity.LOOSE.name) ?: "")
+        set(v) = prefs.edit().putString("sensitivity", v.name).apply()
 
     var motionSensing: Boolean
         get() = prefs.getBoolean("motion_sensing", true)
@@ -57,9 +97,21 @@ class Settings(context: Context) {
         get() = prefs.getString("alarm_sound_uri", "") ?: ""
         set(v) = prefs.edit().putString("alarm_sound_uri", v).apply()
 
-    var autoDeleteDays: Int
-        get() = prefs.getInt("auto_delete_days", 30)
-        set(v) = prefs.edit().putInt("auto_delete_days", v).apply()
+    /**
+     * Audio is the expensive thing on disk, so it goes first and it goes quickly.
+     * Starred clips are exempt.
+     */
+    var clipRetentionDays: Int
+        get() = prefs.getInt("clip_retention_days", 7)
+        set(v) = prefs.edit().putInt("clip_retention_days", v).apply()
+
+    /**
+     * The graphs and scores are a few hundred KB a year, and Trends needs history to be worth
+     * anything, so nights outlive their audio by a long way.
+     */
+    var nightRetentionDays: Int
+        get() = prefs.getInt("night_retention_days", 365)
+        set(v) = prefs.edit().putInt("night_retention_days", v).apply()
 
     /** Session id currently being tracked, or empty. Survives the app being killed. */
     var activeSessionId: String
@@ -81,5 +133,64 @@ class Settings(context: Context) {
         }
         if (c.timeInMillis <= from) c.add(Calendar.DAY_OF_YEAR, 1)
         return c.timeInMillis
+    }
+
+    /** A single immutable read of everything the UI shows, so Compose has one thing to observe. */
+    fun snapshot(): SettingsSnapshot = SettingsSnapshot(
+        alarmEnabled = alarmEnabled,
+        alarmHour = alarmHour,
+        alarmMinute = alarmMinute,
+        windowMinutes = windowMinutes,
+        snoozeMinutes = snoozeMinutes,
+        sleepGoalMinutes = sleepGoalMinutes,
+        recordSounds = recordSounds,
+        sensitivity = sensitivity,
+        motionSensing = motionSensing,
+        vibrate = vibrate,
+        rampSeconds = rampSeconds,
+        alarmSoundUri = alarmSoundUri,
+        clipRetentionDays = clipRetentionDays,
+        nightRetentionDays = nightRetentionDays
+    )
+}
+
+/**
+ * Immutable mirror of [Settings].
+ *
+ * The UI edits it with `copy(...)` and hands the result back, which is why there are no
+ * per-field setter methods: an earlier version had `setWindowMinutes(...)` next to a
+ * `windowMinutes` property and the two collided on the same JVM signature.
+ */
+data class SettingsSnapshot(
+    val alarmEnabled: Boolean,
+    val alarmHour: Int,
+    val alarmMinute: Int,
+    val windowMinutes: Int,
+    val snoozeMinutes: Int,
+    val sleepGoalMinutes: Int,
+    val recordSounds: Boolean,
+    val sensitivity: Sensitivity,
+    val motionSensing: Boolean,
+    val vibrate: Boolean,
+    val rampSeconds: Int,
+    val alarmSoundUri: String,
+    val clipRetentionDays: Int,
+    val nightRetentionDays: Int
+) {
+    fun writeTo(settings: Settings) {
+        settings.alarmEnabled = alarmEnabled
+        settings.alarmHour = alarmHour
+        settings.alarmMinute = alarmMinute
+        settings.windowMinutes = windowMinutes
+        settings.snoozeMinutes = snoozeMinutes
+        settings.sleepGoalMinutes = sleepGoalMinutes
+        settings.recordSounds = recordSounds
+        settings.sensitivity = sensitivity
+        settings.motionSensing = motionSensing
+        settings.vibrate = vibrate
+        settings.rampSeconds = rampSeconds
+        settings.alarmSoundUri = alarmSoundUri
+        settings.clipRetentionDays = clipRetentionDays
+        settings.nightRetentionDays = nightRetentionDays
     }
 }

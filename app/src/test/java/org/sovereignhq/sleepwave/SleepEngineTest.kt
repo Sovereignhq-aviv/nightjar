@@ -2,6 +2,7 @@ package org.sovereignhq.sleepwave
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Test
 import org.sovereignhq.sleepwave.audio.Fft
 import org.sovereignhq.sleepwave.audio.WavWriter
 import org.sovereignhq.sleepwave.data.Sample
@@ -9,15 +10,15 @@ import org.sovereignhq.sleepwave.data.SleepSession
 import org.sovereignhq.sleepwave.data.Stage
 import org.sovereignhq.sleepwave.sleep.SleepClassifier
 import org.sovereignhq.sleepwave.sleep.SmartAlarm
-import org.junit.Test
 import java.io.File
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.sin
 import kotlin.random.Random
 
 /**
- * Covers the parts that decide whether the app is right or wrong, and that can be checked without
- * a phone: the spectrum analysis, the sleep staging, and the wake-up decision.
+ * Covers the parts that decide whether the app is right or wrong and that can be checked without a
+ * phone: the spectrum analysis, the sleep staging, and the wake-up decision.
  */
 class SleepEngineTest {
 
@@ -26,9 +27,7 @@ class SleepEngineTest {
         val size = 512
         val sampleRate = 16_000
         val toneHz = 250.0
-        val samples = FloatArray(size) { i ->
-            sin(2.0 * PI * toneHz * i / sampleRate).toFloat()
-        }
+        val samples = FloatArray(size) { i -> sin(2.0 * PI * toneHz * i / sampleRate).toFloat() }
 
         val mags = FloatArray(size / 2)
         Fft(size).magnitudes(samples, 0, mags)
@@ -36,7 +35,7 @@ class SleepEngineTest {
         val peakBin = mags.indices.maxByOrNull { mags[it] } ?: -1
         val peakHz = peakBin * sampleRate.toDouble() / size
         // Bin resolution is 31.25 Hz, so landing within one bin of 250 Hz is exact.
-        assertTrue("Peak landed at $peakHz Hz", kotlin.math.abs(peakHz - toneHz) <= 31.25)
+        assertTrue("Peak landed at $peakHz Hz", abs(peakHz - toneHz) <= 31.25)
     }
 
     @Test
@@ -58,7 +57,6 @@ class SleepEngineTest {
 
     @Test
     fun `awake stretches at the start count as falling asleep, not as sleep`() {
-        // Twenty restless minutes of lying awake, then a settled night.
         val activity = FloatArray(400) { i -> if (i < 20) 0.9f else 0.08f }
         val stats = SleepClassifier.stats(sessionFrom(activity), goalMinutes = 480)
 
@@ -70,17 +68,13 @@ class SleepEngineTest {
 
     @Test
     fun `single-minute stage flickers are smoothed away`() {
-        // A quiet night with one isolated loud minute should not produce a one-minute awake blip.
         val activity = FloatArray(300) { i -> if (i == 150) 0.95f else 0.06f }
         val stages = SleepClassifier.classify(sessionFrom(activity)).map { it.stage }
 
-        // Any awake stretch that survives smoothing must be at least two minutes long.
         var run = 0
         var oneMinuteBlips = 0
         (stages + Stage.DEEP.ordinal).forEach { stage ->
-            if (stage == Stage.AWAKE.ordinal) {
-                run++
-            } else {
+            if (stage == Stage.AWAKE.ordinal) run++ else {
                 if (run == 1) oneMinuteBlips++
                 run = 0
             }
@@ -93,7 +87,7 @@ class SleepEngineTest {
         val decision = SmartAlarm.evaluate(
             minutesIntoWindow = 30,
             windowMinutes = 30,
-            recent = List(10) { 0.01f },      // dead still, deep sleep
+            recent = List(10) { 0.01f },
             nightQuiet = 0.0f,
             nightBusy = 1.0f
         )

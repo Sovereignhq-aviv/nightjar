@@ -32,11 +32,7 @@ import org.sovereignhq.sleepwave.ui.components.NightCard
 import org.sovereignhq.sleepwave.ui.components.SectionLabel
 import org.sovereignhq.sleepwave.ui.components.StatTile
 import org.sovereignhq.sleepwave.ui.components.TrendBars
-import org.sovereignhq.sleepwave.ui.theme.Amber
-import org.sovereignhq.sleepwave.ui.theme.Indigo
-import org.sovereignhq.sleepwave.ui.theme.Mint
-import org.sovereignhq.sleepwave.ui.theme.NightSurfaceHigh
-import org.sovereignhq.sleepwave.ui.theme.TextMuted
+import org.sovereignhq.sleepwave.ui.theme.DataColors
 import java.util.Calendar
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -44,7 +40,7 @@ import kotlin.math.roundToInt
 @Composable
 fun TrendsScreen(
     vm: SleepViewModel,
-    onOpenSession: (String) -> Unit,
+    onOpenNight: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var nights by remember { mutableIntStateOf(7) }
@@ -60,7 +56,7 @@ fun TrendsScreen(
             .padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(10.dp))
         Text("Trends", style = MaterialTheme.typography.headlineMedium)
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -72,8 +68,8 @@ fun TrendsScreen(
         if (all.isEmpty()) {
             EmptyState(
                 title = "Nothing to compare yet",
-                body = "Track two or three nights and this page starts showing what actually " +
-                    "moves your sleep."
+                body = "Track two or three nights and this page starts showing what actually moves " +
+                    "your sleep."
             )
             Spacer(Modifier.height(24.dp))
             return@Column
@@ -90,7 +86,7 @@ fun TrendsScreen(
                 StatTile(
                     "quality",
                     "${paired.map { it.second.score }.average().roundToInt()}%",
-                    Mint,
+                    MaterialTheme.colorScheme.secondary,
                     Modifier.weight(1f)
                 )
             }
@@ -116,17 +112,17 @@ fun TrendsScreen(
                     Bar(
                         label = formatWeekday(it.first.startedAtMs).take(2),
                         value = it.second.asleepMinutes / 60f,
-                        highlight = it.second.asleepMinutes >= vm.sleepGoalMinutes
+                        highlight = it.second.asleepMinutes >= vm.settings.sleepGoalMinutes
                     )
                 },
-                goalFraction = vm.sleepGoalMinutes / 60f
+                goalValue = vm.settings.sleepGoalMinutes / 60f
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "Dotted line is your ${formatDuration(vm.sleepGoalMinutes)} goal. " +
+                "Dotted line is your ${formatDuration(vm.settings.sleepGoalMinutes)} goal. " +
                     "Solid bars hit it.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextMuted
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
@@ -136,8 +132,30 @@ fun TrendsScreen(
                 bars = paired.map {
                     Bar(formatWeekday(it.first.startedAtMs).take(2), it.second.score.toFloat())
                 },
-                barColor = Mint
+                barColor = MaterialTheme.colorScheme.secondary
             )
+        }
+
+        if (paired.any { it.first.clips.isNotEmpty() }) {
+            SectionLabel("Recordings per night")
+            NightCard {
+                TrendBars(
+                    bars = paired.map {
+                        Bar(
+                            formatWeekday(it.first.startedAtMs).take(2),
+                            it.first.clips.size.toFloat()
+                        )
+                    },
+                    barColor = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "${paired.sumOf { it.first.clips.size }} clips across this period, " +
+                        "${paired.sumOf { p -> p.first.clips.count { it.starred } }} saved.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
 
         WeekdayBreakdown(paired)
@@ -152,14 +170,14 @@ fun TrendsScreen(
                             it.second.snoreMinutes.toFloat()
                         )
                     },
-                    barColor = Amber
+                    barColor = DataColors.snore
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     "Total ${formatDuration(paired.sumOf { it.second.snoreMinutes })} of snoring " +
                         "across this period.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextMuted
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -174,36 +192,37 @@ fun TrendsScreen(
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .clickable { onOpenSession(session.id) }
-                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                        .clickable { onOpenNight(session.id) }
+                        .padding(horizontal = 12.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column {
                         Text(formatDay(session.startedAtMs), style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "${formatClock(session.startedAtMs)} - ${formatClock(session.endedAtMs)}",
+                            "${formatClock(session.startedAtMs)} - ${formatClock(session.endedAtMs)}" +
+                                if (session.clips.isEmpty()) "" else "  ·  ${session.clips.size} clips",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = TextMuted
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             formatDuration(stats.asleepMinutes),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = TextMuted
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
                             "   ${stats.score}%",
                             style = MaterialTheme.typography.titleMedium,
-                            color = Mint
+                            color = MaterialTheme.colorScheme.secondary
                         )
                     }
                 }
             }
         }
 
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(24.dp))
     }
 }
 
@@ -228,18 +247,19 @@ private fun WeekdayBreakdown(paired: List<Pair<SleepSession, SessionStats>>) {
             bars = order.map { (day, label) ->
                 val scores = byDay[day]?.map { it.second.score } ?: emptyList()
                 Bar(label, if (scores.isEmpty()) 0f else scores.average().toFloat())
-            },
-            barColor = Indigo
+            }
         )
         val best = order.mapNotNull { (day, label) ->
-            byDay[day]?.takeIf { it.isNotEmpty() }?.let { label to it.map { s -> s.second.score }.average() }
+            val nights = byDay[day]
+            if (nights.isNullOrEmpty()) null else label to nights.map { it.second.score }.average()
         }.maxByOrNull { it.second }
+
         if (best != null) {
             Spacer(Modifier.height(8.dp))
             Text(
                 "Your best nights land on ${fullDayName(best.first)}.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextMuted
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -259,7 +279,7 @@ private fun TagInfluence(sessions: List<SleepSession>, vm: SleepViewModel) {
         val withScore = with.map { vm.stats(it).score }.average()
         val withoutScore = without.map { vm.stats(it).score }.average()
         Triple(tag, (withScore - withoutScore).roundToInt(), with.size)
-    }.sortedBy { abs(it.second) }.reversed()
+    }.sortedByDescending { abs(it.second) }
 
     if (rows.isEmpty()) return
 
@@ -278,13 +298,17 @@ private fun TagInfluence(sessions: List<SleepSession>, vm: SleepViewModel) {
                     Text(
                         "$count night${if (count == 1) "" else "s"}",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = TextMuted
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Text(
                     text = if (delta >= 0) "+$delta%" else "$delta%",
                     style = MaterialTheme.typography.titleLarge,
-                    color = if (delta >= 0) Mint else MaterialTheme.colorScheme.error
+                    color = if (delta >= 0) {
+                        MaterialTheme.colorScheme.secondary
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    }
                 )
             }
         }
@@ -293,7 +317,7 @@ private fun TagInfluence(sessions: List<SleepSession>, vm: SleepViewModel) {
             "Difference in quality score on nights you tagged this, against nights you did not. " +
                 "Suggestive, not proof - a handful of nights is a small sample.",
             style = MaterialTheme.typography.bodyMedium,
-            color = TextMuted
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
@@ -308,15 +332,19 @@ private fun PeriodChip(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) Indigo else NightSurfaceHigh)
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.surfaceVariant
+            )
             .clickable(onClick = onClick)
-            .padding(vertical = 10.dp),
+            .padding(vertical = 14.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             label,
             style = MaterialTheme.typography.labelLarge,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary else TextMuted
+            color = if (selected) MaterialTheme.colorScheme.onPrimary
+            else MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }

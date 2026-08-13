@@ -36,6 +36,10 @@ object SleepState {
     private val _clipCount = MutableStateFlow(0)
     val clipCount: StateFlow<Int> = _clipCount.asStateFlow()
 
+    /** Every classified noise, including those that did not earn a recording. */
+    private val _eventCount = MutableStateFlow(0)
+    val eventCount: StateFlow<Int> = _eventCount.asStateFlow()
+
     private val _alarmRinging = MutableStateFlow(false)
     val alarmRinging: StateFlow<Boolean> = _alarmRinging.asStateFlow()
 
@@ -53,6 +57,7 @@ object SleepState {
         _liveActivity.value = emptyList()
         _snoreMinutes.value = 0
         _clipCount.value = 0
+        _eventCount.value = 0
         _level.value = 0f
         _error.value = null
         _finishedSessionId.value = null
@@ -71,6 +76,7 @@ object SleepState {
     fun setLevel(v: Float) { _level.value = v }
     fun setSnoreMinutes(v: Int) { _snoreMinutes.value = v }
     fun setClipCount(v: Int) { _clipCount.value = v }
+    fun setEventCount(v: Int) { _eventCount.value = v }
     fun setAlarmRinging(v: Boolean) { _alarmRinging.value = v }
     fun setError(message: String?) { _error.value = message }
     fun consumeFinishedSession() { _finishedSessionId.value = null }

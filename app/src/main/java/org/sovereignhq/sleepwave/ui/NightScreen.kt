@@ -2,6 +2,11 @@ package org.sovereignhq.sleepwave.ui
 
 import android.app.Activity
 import android.view.WindowManager
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,24 +36,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import org.sovereignhq.sleepwave.ui.components.LiveWave
 import org.sovereignhq.sleepwave.ui.components.SectionLabel
-import org.sovereignhq.sleepwave.ui.theme.Amber
-import org.sovereignhq.sleepwave.ui.theme.Indigo
-import org.sovereignhq.sleepwave.ui.theme.Mint
-import org.sovereignhq.sleepwave.ui.theme.NightBg
-import org.sovereignhq.sleepwave.ui.theme.TextMuted
 
 /**
  * What you see if you glance at the phone at 3am. Almost nothing, at almost no brightness.
  *
- * The screen brightness is forced to its minimum while this is showing: a bright phone in a dark
- * bedroom defeats the purpose of the app it belongs to.
+ * Screen brightness is forced to its minimum while this is showing: a bright phone in a dark
+ * bedroom defeats the purpose of the app it belongs to. The one moving thing is a slow pulse on the
+ * listening dot, which exists to answer the only question worth asking at 3am - is this still on.
  */
 @Composable
 fun NightScreen(
@@ -57,6 +57,7 @@ fun NightScreen(
     liveActivity: List<Float>,
     level: Float,
     snoreMinutes: Int,
+    clipCount: Int,
     error: String?,
     onStop: () -> Unit,
     modifier: Modifier = Modifier
@@ -89,12 +90,22 @@ fun NightScreen(
         }
     }
 
+    val pulse by rememberInfiniteTransition(label = "listening").animateFloat(
+        initialValue = 0.25f,
+        targetValue = 0.85f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2_600),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
+
     val elapsedMinutes = ((now - startedAtMs) / 60_000L).toInt().coerceAtLeast(0)
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(NightBg)
+            .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
@@ -104,12 +115,16 @@ fun NightScreen(
                 Modifier
                     .size(8.dp)
                     .clip(CircleShape)
-                    .background(Indigo.copy(alpha = 0.35f + level.coerceIn(0f, 1f) * 0.65f))
+                    .background(
+                        MaterialTheme.colorScheme.primary.copy(
+                            alpha = maxOf(pulse, level.coerceIn(0f, 1f))
+                        )
+                    )
             )
             Text(
                 "  LISTENING",
                 style = MaterialTheme.typography.labelSmall,
-                color = TextMuted
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
@@ -118,13 +133,13 @@ fun NightScreen(
         Text(
             text = formatClock(now),
             style = MaterialTheme.typography.displayLarge,
-            color = Color(0xFF9AA3C7)
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
         Text(
-            text = "asleep for ${formatDuration(elapsedMinutes)}",
+            text = "in bed for ${formatDuration(elapsedMinutes)}",
             style = MaterialTheme.typography.bodyLarge,
-            color = TextMuted
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
         Spacer(Modifier.height(36.dp))
@@ -138,22 +153,30 @@ fun NightScreen(
             Text(
                 text = "by ${formatClock(alarmTargetMs)}",
                 style = MaterialTheme.typography.titleLarge,
-                color = Mint
+                color = MaterialTheme.colorScheme.secondary
             )
         } else {
             Text(
                 "No alarm set",
                 style = MaterialTheme.typography.titleMedium,
-                color = TextMuted
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
-        if (snoreMinutes > 0) {
-            Spacer(Modifier.height(12.dp))
+        if (clipCount > 0 || snoreMinutes > 0) {
+            Spacer(Modifier.height(16.dp))
             Text(
-                text = "$snoreMinutes min of snoring so far",
+                text = buildString {
+                    if (clipCount > 0) {
+                        append("$clipCount recording${if (clipCount == 1) "" else "s"} so far")
+                    }
+                    if (snoreMinutes > 0) {
+                        if (isNotEmpty()) append("  ·  ")
+                        append("$snoreMinutes min snoring")
+                    }
+                },
                 style = MaterialTheme.typography.bodyMedium,
-                color = Amber.copy(alpha = 0.8f)
+                color = MaterialTheme.colorScheme.primary
             )
         }
 
@@ -176,7 +199,7 @@ fun NightScreen(
                 .fillMaxWidth()
                 .height(54.dp)
         ) {
-            Text("Stop tracking", color = TextMuted)
+            Text("Stop tracking", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 
@@ -187,7 +210,7 @@ fun NightScreen(
             text = {
                 Text(
                     "The night so far will be saved and the alarm will be cancelled.",
-                    color = TextMuted
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             confirmButton = {

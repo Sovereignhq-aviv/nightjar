@@ -9,6 +9,10 @@ import java.io.File
  * Sessions live as one JSON file each in filesDir/sessions, audio clips in filesDir/clips.
  * One file per night is a few hundred KB at most, so there is no database here on purpose:
  * fewer moving parts, and the whole history can be copied off the phone with a file manager.
+ *
+ * Retention is two-tier and deliberately lopsided. Audio is what fills a phone, so it is deleted
+ * within days unless starred. The graphs and scores are tiny and Trends is worthless without
+ * history, so nights are kept for about a year.
  */
 class SessionStore(context: Context) {
 
@@ -46,14 +50,48 @@ class SessionStore(context: Context) {
         runCatching { File(sessionsDir, "${session.id}.json").delete() }
     }
 
-    /** Drops nights older than [days], audio included. [days] <= 0 keeps everything. */
-    fun pruneOlderThan(days: Int) {
+    /** Returns the updated session so callers can refresh without a full reload. */
+    fun setStarred(session: SleepSession, fileName: String, starred: Boolean): SleepSession {
+        val updated = session.copy(
+            clips = session.clips.map { if (it.fileName == fileName) it.copy(starred = starred) else it }
+        )
+        save(updated)
+        return updated
+    }
+
+    fun deleteClip(session: SleepSession, fileName: String): SleepSession {
+        runCatching { clipFile(fileName).delete() }
+        val updated = session.copy(clips = session.clips.filterNot { it.fileName == fileName })
+        save(updated)
+        return updated
+    }
+
+    /**
+     * Deletes clip audio older than [days], keeping anything starred, then removes the now-dangling
+     * entries from their sessions so the library never offers a row that cannot play.
+     * [days] <= 0 keeps everything.
+     */
+    fun pruneAudio(days: Int) {
         if (days <= 0) return
-        val cutoff = System.currentTimeMillis() - days * 24L * 60L * 60L * 1000L
-        loadAll().filter { it.startedAtMs < cutoff }.forEach { delete(it) }
-        // Sweep clips that lost their session for any reason.
+        val cutoff = System.currentTimeMillis() - days * DAY_MS
+
+        loadAll().forEach { session ->
+            val expired = session.clips.filter { !it.starred && it.startedAtMs < cutoff }
+            if (expired.isEmpty()) return@forEach
+            expired.forEach { runCatching { clipFile(it.fileName).delete() } }
+            save(session.copy(clips = session.clips - expired.toSet()))
+        }
+
+        // Sweep orphans: files whose session was deleted, or writes interrupted mid-night.
         val referenced = loadAll().flatMap { s -> s.clips.map { it.fileName } }.toSet()
         clipsDir.listFiles()?.forEach { f -> if (f.name !in referenced) f.delete() }
+    }
+
+    /** Drops whole nights older than [days], audio included. [days] <= 0 keeps everything. */
+    fun pruneSessions(days: Int) {
+        if (days <= 0) return
+        val cutoff = System.currentTimeMillis() - days * DAY_MS
+        loadAll().filter { it.startedAtMs < cutoff }.forEach { delete(it) }
     }
 
     fun clipBytesOnDisk(): Long = clipsDir.listFiles()?.sumOf { it.length() } ?: 0L
@@ -67,5 +105,6 @@ class SessionStore(context: Context) {
 
     private companion object {
         const val TAG = "SessionStore"
+        const val DAY_MS = 24L * 60L * 60L * 1000L
     }
 }

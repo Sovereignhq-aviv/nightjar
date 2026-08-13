@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="night_bg">#0B0D1A</color>
+    <!-- Must match Ink0 in Theme.kt: this paints the window before Compose draws. -->
+    <color name="night_bg">#08090F</color>
     <color name="ic_launcher_background">#141A33</color>
 </resources>

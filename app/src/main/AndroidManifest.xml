@@ -57,6 +57,17 @@
             android:name=".service.AlarmReceiver"
             android:exported="false" />
 
+        <!-- Clips live in private storage, so sharing one needs a content:// grant. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.clips"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <receiver
             android:name=".service.BootReceiver"
             android:exported="true"

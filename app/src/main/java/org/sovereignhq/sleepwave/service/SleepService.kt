@@ -11,8 +11,9 @@ import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import org.sovereignhq.sleepwave.alarm.AlarmPlayer
+import org.sovereignhq.sleepwave.audio.EventDetector
 import org.sovereignhq.sleepwave.audio.NightRecorder
-import org.sovereignhq.sleepwave.audio.SnoreDetector
+import org.sovereignhq.sleepwave.data.EventKind
 import org.sovereignhq.sleepwave.data.Sample
 import org.sovereignhq.sleepwave.data.SessionStore
 import org.sovereignhq.sleepwave.data.Settings
@@ -29,20 +30,20 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Runs the whole night.
  *
  * A foreground service with a partial wake lock is the only way Android will let an app keep the
- * microphone open with the screen off for eight hours. Everything else here hangs off that: the
- * recorder feeds frames in, frames become minutes, minutes become sleep stages, and once the wake
- * window opens each new minute is also a chance to ring the alarm.
+ * microphone open with the screen off for eight hours. Everything else hangs off that: the recorder
+ * feeds frames in, frames become classified events and per-minute restlessness, minutes become
+ * sleep stages, and once the wake window opens each new minute is also a chance to ring the alarm.
  *
  * Minute boundaries are driven by audio frame timestamps rather than a timer, because a timer is
  * exactly the thing Doze mode likes to postpone, while audio frames keep arriving as long as the
  * microphone is open.
  */
-class SleepService : Service(), NightRecorder.Listener, SnoreDetector.Listener {
+class SleepService : Service(), NightRecorder.Listener, EventDetector.Listener {
 
     private lateinit var settings: Settings
     private lateinit var store: SessionStore
     private lateinit var recorder: NightRecorder
-    private lateinit var detector: SnoreDetector
+    private lateinit var detector: EventDetector
     private lateinit var motion: MotionMonitor
     private lateinit var player: AlarmPlayer
 
@@ -59,11 +60,10 @@ class SleepService : Service(), NightRecorder.Listener, SnoreDetector.Listener {
     private var windowMinutes = 30
     private var nextMinuteBoundaryMs = 0L
     private var snoreMinutes = 0
-    private var snoreClipCount = 0
-    private var noiseClipCount = 0
-    private var lastSnoreClipMs = 0L
-    private var lastNoiseClipMs = 0L
+    private var maxClips = 120
+    private var lastClipMs = 0L
     private var lastNotificationMs = 0L
+    private var eventCount = 0
 
     private val tracking = AtomicBoolean(false)
     private val sessionSaved = AtomicBoolean(false)
@@ -76,7 +76,7 @@ class SleepService : Service(), NightRecorder.Listener, SnoreDetector.Listener {
         settings = Settings(this)
         store = SessionStore(this)
         recorder = NightRecorder(store.clipsDir, this)
-        detector = SnoreDetector(this)
+        detector = EventDetector(settings.sensitivity.triggerDb, this)
         motion = MotionMonitor(this)
         player = AlarmPlayer(this)
         Notifications.createChannels(this)
@@ -101,16 +101,19 @@ class SleepService : Service(), NightRecorder.Listener, SnoreDetector.Listener {
     private fun startTracking() {
         if (tracking.get()) return
 
+        val sensitivity = settings.sensitivity
         startedAtMs = System.currentTimeMillis()
         sessionId = "session_$startedAtMs"
         windowMinutes = settings.windowMinutes
         alarmTargetMs = if (settings.alarmEnabled) settings.nextAlarmTimeMs(startedAtMs) else 0L
         nextMinuteBoundaryMs = startedAtMs + 60_000
+        maxClips = sensitivity.maxClipsPerNight
+        detector = EventDetector(sensitivity.triggerDb, this)
         samples.clear()
         clips.clear()
         snoreMinutes = 0
-        snoreClipCount = 0
-        noiseClipCount = 0
+        eventCount = 0
+        lastClipMs = 0L
         wokeAtMs = null
         wokeSmart = false
         sessionSaved.set(false)
@@ -119,7 +122,7 @@ class SleepService : Service(), NightRecorder.Listener, SnoreDetector.Listener {
         settings.activeSessionId = sessionId
         settings.activeAlarmTargetMs = alarmTargetMs
 
-        goForeground(alarmSummary())
+        goForeground(statusLine())
 
         acquireWakeLock()
         if (settings.motionSensing && motion.available) motion.start()
@@ -143,7 +146,7 @@ class SleepService : Service(), NightRecorder.Listener, SnoreDetector.Listener {
         settings.activeSessionId = ""
         settings.activeAlarmTargetMs = 0L
         SleepState.endNight(saved?.id)
-        if (userInitiated) store.pruneOlderThan(settings.autoDeleteDays)
+        if (userInitiated) housekeep()
         if (!player.isPlaying) stopEverything()
     }
 
@@ -152,13 +155,15 @@ class SleepService : Service(), NightRecorder.Listener, SnoreDetector.Listener {
         SleepState.setAlarmRinging(false)
         Notifications.cancelAlarm(this)
         releaseWakeLock()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-        } else {
-            @Suppress("DEPRECATION")
-            stopForeground(true)
-        }
+        stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    private fun housekeep() {
+        runCatching {
+            store.pruneAudio(settings.clipRetentionDays)
+            store.pruneSessions(settings.nightRetentionDays)
+        }
     }
 
     // ---------------------------------------------------------- recorder input
@@ -183,9 +188,19 @@ class SleepService : Service(), NightRecorder.Listener, SnoreDetector.Listener {
         startedAtMs: Long,
         durationMs: Long,
         kind: String,
-        peakDb: Float
+        peakDb: Float,
+        envelope: List<Int>
     ) {
-        clips.add(SoundClip(fileName, startedAtMs, durationMs, kind, peakDb))
+        clips.add(
+            SoundClip(
+                fileName = fileName,
+                startedAtMs = startedAtMs,
+                durationMs = durationMs,
+                kind = kind,
+                peakDb = peakDb,
+                envelope = envelope
+            )
+        )
         SleepState.setClipCount(clips.size)
     }
 
@@ -196,30 +211,24 @@ class SleepService : Service(), NightRecorder.Listener, SnoreDetector.Listener {
         main.post { updateNotification("Microphone unavailable - alarm still set", force = true) }
     }
 
-    // ------------------------------------------------------------ snore input
+    // ------------------------------------------------------------ event input
 
-    override fun onSnoreBurst(timeMs: Long, peakDb: Float) {
-        aggregator.markSnoring()
-    }
+    override fun onEvent(event: EventDetector.Event) {
+        eventCount++
+        if (event.kind == EventKind.SNORE || event.cadenced) aggregator.markSnoring()
+        SleepState.setEventCount(eventCount)
 
-    override fun onSnoreEpisode(timeMs: Long, peakDb: Float) {
-        if (!settings.recordSnoring) return
-        if (snoreClipCount >= MAX_SNORE_CLIPS) return
+        if (!settings.recordSounds) return
+        if (clips.size >= maxClips) return
+        if (recorder.clipPending) return
+
+        // A short cooldown, not a long one: the point of this app is catching things, and clips
+        // overlap by design anyway thanks to the lead-in.
         val now = System.currentTimeMillis()
-        if (now - lastSnoreClipMs < SNORE_CLIP_COOLDOWN_MS) return
-        lastSnoreClipMs = now
-        snoreClipCount++
-        recorder.requestClip("SNORE", peakDb)
-    }
+        if (now - lastClipMs < CLIP_COOLDOWN_MS) return
+        lastClipMs = now
 
-    override fun onNoiseEvent(timeMs: Long, peakDb: Float) {
-        if (!settings.recordSnoring) return
-        if (noiseClipCount >= MAX_NOISE_CLIPS) return
-        val now = System.currentTimeMillis()
-        if (now - lastNoiseClipMs < NOISE_CLIP_COOLDOWN_MS) return
-        lastNoiseClipMs = now
-        noiseClipCount++
-        recorder.requestClip("NOISE", peakDb)
+        recorder.requestClip(event.kind.name, event.peakAboveFloorDb)
     }
 
     // ------------------------------------------------------------ the minute loop
@@ -242,7 +251,7 @@ class SleepService : Service(), NightRecorder.Listener, SnoreDetector.Listener {
         SleepState.appendMinute(result.activity)
         SleepState.setSnoreMinutes(snoreMinutes)
 
-        main.post { updateNotification(alarmSummary(), force = false) }
+        main.post { updateNotification(statusLine(), force = false) }
         considerWaking()
     }
 
@@ -327,6 +336,8 @@ class SleepService : Service(), NightRecorder.Listener, SnoreDetector.Listener {
         AlarmScheduler.cancel(this)
         if (tracking.get()) {
             stopTracking(userInitiated = true)
+        } else {
+            housekeep()
         }
         stopEverything()
     }
@@ -372,15 +383,11 @@ class SleepService : Service(), NightRecorder.Listener, SnoreDetector.Listener {
 
     private fun goForeground(text: String) {
         val notification = Notifications.tracking(this, text)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                Notifications.ID_TRACKING,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-            )
-        } else {
-            startForeground(Notifications.ID_TRACKING, notification)
-        }
+        startForeground(
+            Notifications.ID_TRACKING,
+            notification,
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        )
         lastNotificationMs = System.currentTimeMillis()
     }
 
@@ -393,18 +400,19 @@ class SleepService : Service(), NightRecorder.Listener, SnoreDetector.Listener {
             ?.notify(Notifications.ID_TRACKING, Notifications.tracking(this, text))
     }
 
-    private fun alarmSummary(): String {
+    private fun statusLine(): String {
         val hours = samples.size / 60
         val minutes = samples.size % 60
         val elapsed = when {
-            samples.isEmpty() -> "starting"
-            hours == 0 -> "${minutes}m so far"
-            else -> "${hours}h ${minutes}m so far"
+            samples.isEmpty() -> "Listening"
+            hours == 0 -> "${minutes}m in"
+            else -> "${hours}h ${minutes}m in"
         }
-        if (alarmTargetMs <= 0L) return "$elapsed - no alarm set"
+        val recorded = if (clips.isEmpty()) "" else " - ${clips.size} recorded"
+        if (alarmTargetMs <= 0L) return "$elapsed$recorded - no alarm"
         val target = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
             .format(java.util.Date(alarmTargetMs))
-        return "$elapsed - waking you by $target"
+        return "$elapsed$recorded - waking you by $target"
     }
 
     private fun acquireWakeLock() {
@@ -453,18 +461,13 @@ class SleepService : Service(), NightRecorder.Listener, SnoreDetector.Listener {
         private const val MAX_NIGHT_MS = 13L * 60L * 60L * 1000L
         private const val NOTIFICATION_INTERVAL_MS = 5L * 60L * 1000L
         private const val MIN_SAVEABLE_MINUTES = 10
-        private const val MAX_SNORE_CLIPS = 40
-        private const val MAX_NOISE_CLIPS = 15
-        private const val SNORE_CLIP_COOLDOWN_MS = 10L * 60L * 1000L
-        private const val NOISE_CLIP_COOLDOWN_MS = 4L * 60L * 1000L
+
+        /** Long enough that one snore does not become three clips, short enough to catch a lot. */
+        private const val CLIP_COOLDOWN_MS = 15_000L
 
         fun start(context: android.content.Context) {
             val intent = Intent(context, SleepService::class.java).setAction(ACTION_START)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
+            context.startForegroundService(intent)
         }
 
         fun send(context: android.content.Context, action: String) {

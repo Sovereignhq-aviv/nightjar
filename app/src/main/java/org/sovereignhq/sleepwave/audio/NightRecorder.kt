@@ -7,17 +7,23 @@ import android.media.MediaRecorder
 import android.util.Log
 import java.io.File
 import java.util.concurrent.Executors
+import kotlin.math.abs
 import kotlin.math.log10
 import kotlin.math.max
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
  * Owns the microphone for the whole night.
  *
- * Runs one thread that reads 32 ms frames, turns each into a handful of numbers
- * (loudness plus three frequency bands), and forwards them. Raw audio is kept only in a
- * rolling in-memory ring buffer; it reaches disk solely when a clip is requested, which is
- * what makes "record my snoring" possible without recording eight hours of everything.
+ * Runs one thread that reads 32 ms frames, turns each into a handful of numbers (loudness plus
+ * three frequency bands), and forwards them. Raw audio is kept only in a rolling in-memory ring
+ * buffer; it reaches disk solely when a clip is requested. That is what makes "record everything
+ * interesting" possible without recording eight hours of everything.
+ *
+ * Clips reach backwards in time. By the time a sound has been classified it is already over, so
+ * the ring buffer is replayed from [LEAD_SECONDS] before the trigger - you hear the event start,
+ * not its aftermath.
  */
 class NightRecorder(
     private val clipsDir: File,
@@ -26,7 +32,14 @@ class NightRecorder(
 
     interface Listener {
         fun onFrame(frame: Frame)
-        fun onClipSaved(fileName: String, startedAtMs: Long, durationMs: Long, kind: String, peakDb: Float)
+        fun onClipSaved(
+            fileName: String,
+            startedAtMs: Long,
+            durationMs: Long,
+            kind: String,
+            peakDb: Float,
+            envelope: List<Int>
+        )
         fun onError(message: String)
     }
 
@@ -41,6 +54,12 @@ class NightRecorder(
         val highEnergy: Float
     ) {
         val aboveFloorDb: Float get() = rmsDb - floorDb
+
+        /** > 1 means the sound sits below 500 Hz: snores, rumbles, thumps through a mattress. */
+        val lowRatio: Float get() = lowEnergy / (midEnergy + highEnergy + 1e-9f)
+
+        /** > 1 means speech-shaped: energy in the vowel and consonant bands. */
+        val voiceRatio: Float get() = (midEnergy + highEnergy * 0.5f) / (lowEnergy + 1e-9f)
     }
 
     @Volatile var lastLevel: Float = 0f
@@ -71,7 +90,10 @@ class NightRecorder(
         if (running) return
         running = true
         startedAtMs = System.currentTimeMillis()
-        thread = Thread({ loop() }, "sleepwave-mic").apply { priority = Thread.NORM_PRIORITY + 1; start() }
+        thread = Thread({ loop() }, "sleepwave-mic").apply {
+            priority = Thread.NORM_PRIORITY + 1
+            start()
+        }
     }
 
     fun stop() {
@@ -81,10 +103,9 @@ class NightRecorder(
         diskWriter.shutdown()
     }
 
-    /**
-     * Asks for the audio around now to be saved. The clip reaches back [LEAD_SECONDS] into the
-     * ring buffer, so the recording starts before the sound that triggered it.
-     */
+    /** True while a clip is still collecting its tail, so callers can skip re-triggering. */
+    val clipPending: Boolean get() = pendingTriggerSample >= 0
+
     fun requestClip(kind: String, peakDb: Float) {
         if (pendingTriggerSample >= 0) return
         pendingTriggerSample = written
@@ -165,9 +186,6 @@ class NightRecorder(
                 floorDb = floorDb.coerceIn(-90f, -20f)
 
                 fft.magnitudes(floatFrame, 0, mags)
-                val low = bandEnergy(LOW_BIN_FROM, LOW_BIN_TO)
-                val mid = bandEnergy(MID_BIN_FROM, MID_BIN_TO)
-                val high = bandEnergy(HIGH_BIN_FROM, HIGH_BIN_TO)
 
                 lastLevel = ((db - floorDb) / 30f).coerceIn(0f, 1f)
 
@@ -176,9 +194,9 @@ class NightRecorder(
                         timeMs = System.currentTimeMillis(),
                         rmsDb = db,
                         floorDb = floorDb,
-                        lowEnergy = low,
-                        midEnergy = mid,
-                        highEnergy = high
+                        lowEnergy = bandEnergy(LOW_BIN_FROM, LOW_BIN_TO),
+                        midEnergy = bandEnergy(MID_BIN_FROM, MID_BIN_TO),
+                        highEnergy = bandEnergy(HIGH_BIN_FROM, HIGH_BIN_TO)
                     )
                 )
 
@@ -252,27 +270,54 @@ class NightRecorder(
             try {
                 clipsDir.mkdirs()
                 WavWriter.write(File(clipsDir, name), copy, count, SAMPLE_RATE)
-                listener.onClipSaved(name, clipStartMs, durationMs, kind, peak)
+                listener.onClipSaved(name, clipStartMs, durationMs, kind, peak, envelopeOf(copy, count))
             } catch (e: Exception) {
                 Log.e(TAG, "Could not write clip $name", e)
             }
         }
     }
 
+    /**
+     * A 0-100 loudness bucket per slice of the clip, computed once here so the UI can draw a real
+     * waveform for a long list without touching a single audio file.
+     *
+     * Peak rather than RMS per bucket, because a waveform that shows the transients is what makes
+     * a clip recognisable at a glance. Square-rooted so quiet clips are not drawn as flat lines.
+     */
+    private fun envelopeOf(pcm: ShortArray, count: Int): List<Int> {
+        if (count <= 0) return emptyList()
+        val buckets = ENVELOPE_BUCKETS
+        val perBucket = max(1, count / buckets)
+        return (0 until buckets).map { b ->
+            val start = b * perBucket
+            if (start >= count) return@map 0
+            val end = minOf(count, start + perBucket)
+            var peak = 0
+            for (i in start until end) {
+                val v = abs(pcm[i].toInt())
+                if (v > peak) peak = v
+            }
+            (sqrt(peak / 32768f) * 100f).roundToInt().coerceIn(0, 100)
+        }
+    }
+
     companion object {
         const val SAMPLE_RATE = 16_000
         const val FRAME = 512                 // 32 ms per frame
-        private const val LEAD_SECONDS = 8
-        private const val TAIL_SECONDS = 12
-        private const val RING_SECONDS = LEAD_SECONDS + TAIL_SECONDS + 5
+        const val ENVELOPE_BUCKETS = 120
+
+        /** Audio kept before the trigger, so a clip opens with the sound that caused it. */
+        private const val LEAD_SECONDS = 3
+        private const val TAIL_SECONDS = 5
+        private const val RING_SECONDS = LEAD_SECONDS + TAIL_SECONDS + 6
         private const val TAG = "NightRecorder"
 
         // 31.25 Hz per bin at 16 kHz / 512.
-        private const val LOW_BIN_FROM = 2     // 62 Hz  - snore fundamental and harmonics
+        private const val LOW_BIN_FROM = 2     // 62 Hz  - snore and rumble fundamentals
         private const val LOW_BIN_TO = 16      // 500 Hz
-        private const val MID_BIN_FROM = 16    // 500 Hz - voice body
+        private const val MID_BIN_FROM = 16    // 500 Hz - vowels
         private const val MID_BIN_TO = 48      // 1500 Hz
-        private const val HIGH_BIN_FROM = 48   // 1500 Hz - rustling, sibilance, taps
+        private const val HIGH_BIN_FROM = 48   // 1500 Hz - consonants, rustling, taps
         private const val HIGH_BIN_TO = 128    // 4000 Hz
     }
 }

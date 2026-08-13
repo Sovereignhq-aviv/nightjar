@@ -9,6 +9,34 @@ import kotlinx.serialization.Serializable
  */
 enum class Stage { AWAKE, LIGHT, DEEP }
 
+/**
+ * What kind of noise a recording turned out to be.
+ *
+ * The classes exist because "you made 94 noises last night" is useless, while "11 snoring
+ * stretches, 3 times you talked, 6 rumbles" is something you can actually navigate.
+ */
+enum class EventKind {
+    /** Low-frequency, repeating on a breathing cadence. */
+    SNORE,
+
+    /** Mid-band and modulated: talking, mumbling, shouting. */
+    VOICE,
+
+    /** Short low-frequency burst with no cadence. Gut noises, and yes, farts. */
+    RUMBLE,
+
+    /** Sharp broadband hit: rolling over, knocking the headboard, dropping something. */
+    THUMP,
+
+    /** Loud enough to record, not confidently anything else. */
+    OTHER;
+
+    companion object {
+        fun from(name: String): EventKind =
+            entries.firstOrNull { it.name == name } ?: OTHER
+    }
+}
+
 /** One minute of the night. */
 @Serializable
 data class Sample(
@@ -23,16 +51,28 @@ data class Sample(
     val snoring: Boolean = false
 )
 
-/** A recorded audio clip sitting in the app's private clips/ folder. */
+/**
+ * A recorded clip sitting in the app's private clips/ folder.
+ *
+ * [envelope] is computed once when the WAV is written: 0-100 loudness buckets across the clip.
+ * Storing it means the list can draw a real waveform for 120 rows without opening a single audio
+ * file, which is the difference between a list that scrolls and one that stutters.
+ */
 @Serializable
 data class SoundClip(
     val fileName: String,
     val startedAtMs: Long,
     val durationMs: Long,
-    /** "SNORE" or "NOISE". */
+    /** [EventKind] name. */
     val kind: String,
-    val peakDb: Float
-)
+    /** Peak loudness, in dB above the room's background level. */
+    val peakDb: Float,
+    val envelope: List<Int> = emptyList(),
+    /** Starred clips are never auto-deleted. */
+    val starred: Boolean = false
+) {
+    val eventKind: EventKind get() = EventKind.from(kind)
+}
 
 @Serializable
 data class SleepSession(
@@ -52,7 +92,13 @@ data class SleepSession(
     val note: String = "",
     /** How the user says they feel, 0 = unrated, 1..5 stars. */
     val ratingStars: Int = 0
-)
+) {
+    /** Clips whose audio file has been pruned are kept out of the library. */
+    fun clipsNewestFirst(): List<SoundClip> = clips.sortedByDescending { it.startedAtMs }
+
+    fun loudestClips(limit: Int): List<SoundClip> =
+        clips.sortedByDescending { it.peakDb }.take(limit)
+}
 
 /** Everything derived from a session. Computed on read, never stored, so tuning changes apply retroactively. */
 data class SessionStats(

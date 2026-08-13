@@ -8,8 +8,10 @@ import android.os.PowerManager
 import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -29,29 +32,32 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import org.sovereignhq.sleepwave.data.EventKind
+import org.sovereignhq.sleepwave.data.Sensitivity
 import org.sovereignhq.sleepwave.service.AlarmScheduler
 import org.sovereignhq.sleepwave.service.SleepService
 import org.sovereignhq.sleepwave.ui.components.HairLine
+import org.sovereignhq.sleepwave.ui.components.LegendDot
 import org.sovereignhq.sleepwave.ui.components.NightCard
 import org.sovereignhq.sleepwave.ui.components.SectionLabel
-import org.sovereignhq.sleepwave.ui.theme.Amber
-import org.sovereignhq.sleepwave.ui.theme.TextMuted
+import org.sovereignhq.sleepwave.ui.theme.DataColors
 import kotlin.math.roundToInt
 
 @Composable
 fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
     val context = LocalContext.current
+    val settings = vm.settings
 
     val soundPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         @Suppress("DEPRECATION")
         val uri: Uri? = result.data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
-        vm.setAlarmSoundUri(uri?.toString() ?: "")
+        vm.updateSettings { copy(alarmSoundUri = uri?.toString() ?: "") }
     }
 
-    val soundName = remember(vm.alarmSoundUri) {
-        val uri = vm.alarmSoundUri.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
+    val soundName = remember(settings.alarmSoundUri) {
+        val uri = settings.alarmSoundUri.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
             ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
         runCatching { RingtoneManager.getRingtone(context, uri)?.getTitle(context) }
             .getOrNull() ?: "Default alarm sound"
@@ -64,9 +70,101 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
             .padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(10.dp))
         Text("Settings", style = MaterialTheme.typography.headlineMedium)
 
+        // ---------------------------------------------------------- recordings
+        SectionLabel("Recording")
+        NightCard {
+            val storageMb = remember { vm.clipBytes() / 1_000_000 }
+
+            ToggleRow(
+                title = "Record what it hears",
+                subtitle = "Short clips only, saved when something stands out. Turn this off and " +
+                    "the app still tracks sleep and rings the alarm.",
+                checked = settings.recordSounds,
+                onChange = { on -> vm.updateSettings { copy(recordSounds = on) } }
+            )
+
+            Spacer(Modifier.height(18.dp))
+            HairLine()
+            Spacer(Modifier.height(16.dp))
+
+            SectionLabel("How much to catch")
+            Spacer(Modifier.height(10.dp))
+            Sensitivity.entries.forEach { option ->
+                val selected = settings.sensitivity == option
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(
+                            if (selected) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surfaceVariant
+                        )
+                        .clickable { vm.updateSettings { copy(sensitivity = option) } }
+                        .padding(horizontal = 14.dp, vertical = 13.dp)
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            option.label,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+                            else MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            "up to ${option.maxClipsPerNight}/night",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        option.blurb,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            SliderRow(
+                title = "Keep recordings for",
+                value = settings.clipRetentionDays.toFloat(),
+                range = 1f..60f,
+                steps = 0,
+                display = "${settings.clipRetentionDays} days",
+                subtitle = "Anything you star is kept forever. Everything else is deleted after " +
+                    "this. Audio on this phone right now: $storageMb MB.",
+                onChange = { v -> vm.updateSettings { copy(clipRetentionDays = v.roundToInt()) } }
+            )
+
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = { vm.cleanUpNow() },
+                modifier = Modifier.fillMaxWidth().height(48.dp)
+            ) { Text("Clean up now") }
+        }
+
+        SectionLabel("What the labels mean")
+        NightCard {
+            EventKind.entries.forEach { kind ->
+                Column(Modifier.padding(vertical = 7.dp)) {
+                    LegendDot(DataColors.forEvent(kind), eventLabel(kind))
+                    Text(
+                        eventDescription(kind),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 17.dp)
+                    )
+                }
+            }
+        }
+
+        // ---------------------------------------------------------------- alarm
         SectionLabel("Alarm")
         NightCard {
             Row(
@@ -79,123 +177,113 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
                             putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
                             putExtra(
                                 RingtoneManager.EXTRA_RINGTONE_EXISTING_URI,
-                                vm.alarmSoundUri.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
+                                settings.alarmSoundUri.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
                             )
                         }
                         runCatching { soundPicker.launch(intent) }
                     }
-                    .padding(vertical = 6.dp),
+                    .padding(vertical = 10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(Modifier.fillMaxWidth(0.75f)) {
                     Text("Alarm sound", style = MaterialTheme.typography.titleMedium)
-                    Text(soundName, style = MaterialTheme.typography.bodyMedium, color = TextMuted)
+                    Text(
+                        soundName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
                 Text("Change", color = MaterialTheme.colorScheme.primary)
             }
 
             Spacer(Modifier.height(12.dp))
             HairLine()
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(14.dp))
 
             ToggleRow(
                 title = "Vibrate",
                 subtitle = "Gentle pulse alongside the sound",
-                checked = vm.vibrate,
-                onChange = { vm.setVibrate(it) }
+                checked = settings.vibrate,
+                onChange = { on -> vm.updateSettings { copy(vibrate = on) } }
             )
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(18.dp))
             SliderRow(
                 title = "Fade in over",
-                value = vm.rampSeconds.toFloat(),
+                value = settings.rampSeconds.toFloat(),
                 range = 0f..120f,
                 steps = 11,
-                display = if (vm.rampSeconds == 0) "instantly" else "${vm.rampSeconds}s",
+                display = if (settings.rampSeconds == 0) "instantly" else "${settings.rampSeconds}s",
                 subtitle = "Starts almost silent and climbs to full volume",
-                onChange = { vm.setRampSeconds(it.roundToInt()) }
+                onChange = { v -> vm.updateSettings { copy(rampSeconds = v.roundToInt()) } }
             )
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(18.dp))
             SliderRow(
                 title = "Snooze",
-                value = vm.snoozeMinutes.toFloat(),
+                value = settings.snoozeMinutes.toFloat(),
                 range = 1f..20f,
                 steps = 18,
-                display = "${vm.snoozeMinutes} min",
+                display = "${settings.snoozeMinutes} min",
                 subtitle = null,
-                onChange = { vm.setSnoozeMinutes(it.roundToInt()) }
+                onChange = { v -> vm.updateSettings { copy(snoozeMinutes = v.roundToInt()) } }
             )
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(18.dp))
             OutlinedButton(
                 onClick = { SleepService.send(context, SleepService.ACTION_FIRE_ALARM) },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().height(48.dp)
             ) { Text("Test the alarm now") }
             Spacer(Modifier.height(6.dp))
             Text(
                 "Worth doing once. It also tells you whether your alarm volume is turned up.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextMuted
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
-        SectionLabel("Sleep")
+        // ---------------------------------------------------------------- sleep
+        SectionLabel("Sleep tracking")
         NightCard {
             SliderRow(
                 title = "Sleep goal",
-                value = vm.sleepGoalMinutes.toFloat(),
+                value = settings.sleepGoalMinutes.toFloat(),
                 range = 300f..600f,
                 steps = 19,
-                display = formatDuration(vm.sleepGoalMinutes),
-                subtitle = "Used for the quality score and the goal line on trends",
-                onChange = { vm.setSleepGoalMinutes((it / 15f).roundToInt() * 15) }
+                display = formatDuration(settings.sleepGoalMinutes),
+                subtitle = "Used for the quality score and the goal line on Trends",
+                onChange = { v ->
+                    vm.updateSettings { copy(sleepGoalMinutes = (v / 15f).roundToInt() * 15) }
+                }
             )
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(18.dp))
             HairLine()
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(14.dp))
 
             ToggleRow(
                 title = "Use the movement sensor",
                 subtitle = "Adds the accelerometer to sound. Useful when the phone lies on the " +
                     "mattress; harmless on a nightstand.",
-                checked = vm.motionSensing,
-                onChange = { vm.setMotionSensing(it) }
-            )
-        }
-
-        SectionLabel("Recordings")
-        NightCard {
-            // Listing the clips folder touches the disk, so it is measured once per visit.
-            val storageMb = remember { vm.clipBytes() / 1_000_000 }
-
-            ToggleRow(
-                title = "Record snoring and noise",
-                subtitle = "Short clips only, saved when snoring or a loud noise is detected. " +
-                    "Nothing else is written to disk.",
-                checked = vm.recordSnoring,
-                onChange = { vm.setRecordSnoring(it) }
+                checked = settings.motionSensing,
+                onChange = { on -> vm.updateSettings { copy(motionSensing = on) } }
             )
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(18.dp))
             SliderRow(
-                title = "Delete nights after",
-                value = vm.autoDeleteDays.toFloat(),
-                range = 7f..180f,
+                title = "Keep nights for",
+                value = settings.nightRetentionDays.toFloat(),
+                range = 30f..730f,
                 steps = 0,
-                display = "${vm.autoDeleteDays} days",
-                subtitle = "Audio uses about 0.6 MB per clip. Currently $storageMb MB on this phone.",
-                onChange = { vm.setAutoDeleteDays(it.roundToInt()) }
+                display = "${settings.nightRetentionDays} days",
+                subtitle = "Graphs and scores only - a few hundred KB a year. Longer history makes " +
+                    "Trends more useful.",
+                onChange = { v -> vm.updateSettings { copy(nightRetentionDays = v.roundToInt()) } }
             )
-
-            Spacer(Modifier.height(12.dp))
-            OutlinedButton(onClick = { vm.pruneNow() }, modifier = Modifier.fillMaxWidth()) {
-                Text("Clean up old nights now")
-            }
         }
 
+        // ---------------------------------------------------------- reliability
         SectionLabel("Keeping it reliable")
         NightCard {
             val powerManager = context.getSystemService(PowerManager::class.java)
@@ -219,9 +307,9 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
                 }
             )
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(14.dp))
             HairLine()
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(14.dp))
 
             val exact = AlarmScheduler.canScheduleExact(context)
             StatusRow(
@@ -244,9 +332,9 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
                 }
             )
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(14.dp))
             HairLine()
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(14.dp))
 
             Row(
                 Modifier
@@ -259,7 +347,7 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
                             )
                         }
                     }
-                    .padding(vertical = 6.dp),
+                    .padding(vertical = 10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column(Modifier.fillMaxWidth(0.8f)) {
@@ -267,43 +355,43 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
                     Text(
                         "Microphone and notifications live here if you ever need to change them.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = TextMuted
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Text("Open", color = MaterialTheme.colorScheme.primary)
             }
         }
 
+        // --------------------------------------------------------------- honesty
         SectionLabel("How this works")
         NightCard {
             Text(
-                "SleepWave keeps the microphone open all night and measures how much movement " +
-                    "and sound there is each minute. Still minutes are scored as deep sleep, " +
-                    "restless ones as light sleep, and clearly active ones as awake. Everything " +
-                    "is scaled against your own quietest and busiest levels for that night, so " +
-                    "a noisy street or a quiet cottage make no difference.",
+                "The microphone stays open all night, but audio is not written to disk as it goes " +
+                    "- it sits in a fourteen-second loop in memory and is continuously overwritten. " +
+                    "A clip is only saved when something crosses the threshold, and it reaches back " +
+                    "three seconds so you hear the start of it rather than the aftermath.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextMuted
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(12.dp))
             Text(
-                "Worth knowing: this is a well-tuned estimate, not a medical measurement. It " +
-                    "cannot see REM sleep, which shows up inside light sleep, and it cannot tell " +
-                    "your movement from a partner's in the same bed. The smart alarm only needs " +
-                    "to know whether you are restless right now, which is the part it does well.",
+                "Sleep stages come from how much movement and sound there is each minute, scaled " +
+                    "against your own quietest and busiest levels for that night. It is a tuned " +
+                    "estimate, not a medical measurement: it cannot see REM sleep, and it cannot " +
+                    "tell your movement from someone else's in the same bed.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Amber.copy(alpha = 0.85f)
+                color = MaterialTheme.colorScheme.tertiary
             )
             Spacer(Modifier.height(12.dp))
             Text(
                 "No account, no internet, no analytics. Recordings and graphs stay in this app's " +
-                    "private storage on this phone.",
+                    "private storage on this phone until you share or delete them.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextMuted
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(24.dp))
     }
 }
 
@@ -319,10 +407,14 @@ private fun ToggleRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(Modifier.fillMaxWidth(0.78f)) {
+        Column(Modifier.fillMaxWidth(0.76f)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             if (subtitle != null) {
-                Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = TextMuted)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
         Switch(checked = checked, onCheckedChange = onChange)
@@ -340,12 +432,13 @@ private fun SliderRow(
     onChange: (Float) -> Unit
 ) {
     Column {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(display, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            Text(
+                display,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
         }
         Slider(
             value = value.coerceIn(range.start, range.endInclusive),
@@ -354,7 +447,11 @@ private fun SliderRow(
             steps = steps
         )
         if (subtitle != null) {
-            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = TextMuted)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -365,18 +462,22 @@ private fun StatusRow(title: String, ok: Boolean, detail: String, onClick: () ->
         Modifier
             .fillMaxWidth()
             .clickable(enabled = !ok, onClick = onClick)
-            .padding(vertical = 6.dp),
+            .padding(vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(Modifier.fillMaxWidth(0.82f)) {
+        Column(Modifier.fillMaxWidth(0.8f)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(detail, style = MaterialTheme.typography.bodyMedium, color = TextMuted)
+            Text(
+                detail,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
         Text(
             text = if (ok) "OK" else "Fix",
             style = MaterialTheme.typography.labelLarge,
-            color = if (ok) MaterialTheme.colorScheme.secondary else Amber
+            color = if (ok) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.tertiary
         )
     }
 }

@@ -1,64 +1,52 @@
 package org.sovereignhq.sleepwave.ui
 
 import android.app.Application
-import android.media.AudioAttributes
-import android.media.MediaPlayer
-import android.util.Log
+import android.content.Intent
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
+import org.sovereignhq.sleepwave.data.EventKind
 import org.sovereignhq.sleepwave.data.SessionStats
 import org.sovereignhq.sleepwave.data.SessionStore
 import org.sovereignhq.sleepwave.data.Settings
+import org.sovereignhq.sleepwave.data.SettingsSnapshot
 import org.sovereignhq.sleepwave.data.SleepSession
+import org.sovereignhq.sleepwave.data.SoundClip
 import org.sovereignhq.sleepwave.sleep.SleepClassifier
 
-/**
- * Holds what the screens need and keeps SharedPreferences in sync.
- *
- * Settings are mirrored into Compose state rather than read straight from preferences, because
- * SharedPreferences does not tell Compose when a value changes. Each setter writes through to
- * disk immediately, so a night that starts after the app is killed still uses the right values.
- */
+/** How the recordings list is ordered. */
+enum class ClipSort { TIME, LOUDEST }
+
 class SleepViewModel(app: Application) : AndroidViewModel(app) {
 
     private val store = SessionStore(app)
-    val settings = Settings(app)
+    private val settingsStore = Settings(app)
+
+    val player = ClipPlayer(app) { clip -> store.clipFile(clip.fileName) }
 
     var sessions by mutableStateOf<List<SleepSession>>(emptyList())
         private set
 
-    var alarmHour by mutableIntStateOf(settings.alarmHour)
-        private set
-    var alarmMinute by mutableIntStateOf(settings.alarmMinute)
-        private set
-    var alarmEnabled by mutableStateOf(settings.alarmEnabled)
-        private set
-    var windowMinutes by mutableIntStateOf(settings.windowMinutes)
-        private set
-    var snoozeMinutes by mutableIntStateOf(settings.snoozeMinutes)
-        private set
-    var sleepGoalMinutes by mutableIntStateOf(settings.sleepGoalMinutes)
-        private set
-    var recordSnoring by mutableStateOf(settings.recordSnoring)
-        private set
-    var motionSensing by mutableStateOf(settings.motionSensing)
-        private set
-    var vibrate by mutableStateOf(settings.vibrate)
-        private set
-    var rampSeconds by mutableIntStateOf(settings.rampSeconds)
-        private set
-    var autoDeleteDays by mutableIntStateOf(settings.autoDeleteDays)
-        private set
-    var alarmSoundUri by mutableStateOf(settings.alarmSoundUri)
+    /**
+     * One immutable settings object rather than a field per preference. An earlier version had a
+     * `windowMinutes` property beside a `setWindowMinutes()` helper, and the two compiled to the
+     * same JVM signature.
+     */
+    var settings by mutableStateOf(settingsStore.snapshot())
         private set
 
-    var playingClip by mutableStateOf<String?>(null)
+    /** Which night the Sounds and Sleep screens are showing. Null means the most recent. */
+    var selectedSessionId by mutableStateOf<String?>(null)
         private set
 
-    private var player: MediaPlayer? = null
+    var sort by mutableStateOf(ClipSort.TIME)
+        private set
+    var kindFilter by mutableStateOf<EventKind?>(null)
+        private set
+    var starredOnly by mutableStateOf(false)
+        private set
 
     init {
         refresh()
@@ -66,16 +54,92 @@ class SleepViewModel(app: Application) : AndroidViewModel(app) {
 
     fun refresh() {
         sessions = store.loadAll()
+        if (selectedSessionId != null && sessions.none { it.id == selectedSessionId }) {
+            selectedSessionId = null
+        }
     }
 
-    fun session(id: String): SleepSession? = sessions.firstOrNull { it.id == id } ?: store.load(id)
+    // ---- nights ----
+
+    val selectedSession: SleepSession?
+        get() = selectedSessionId?.let { id -> sessions.firstOrNull { it.id == id } }
+            ?: sessions.firstOrNull()
+
+    fun selectSession(id: String?) {
+        selectedSessionId = id
+        player.stop()
+    }
+
+    fun session(id: String): SleepSession? =
+        sessions.firstOrNull { it.id == id } ?: store.load(id)
 
     fun stats(session: SleepSession): SessionStats =
-        SleepClassifier.stats(session, sleepGoalMinutes)
+        SleepClassifier.stats(session, settings.sleepGoalMinutes)
 
-    fun clipPath(fileName: String): String = store.clipFile(fileName).absolutePath
+    // ---- the recordings library ----
 
-    fun clipBytes(): Long = store.clipBytesOnDisk()
+    /** The visible list, after filtering and sorting. */
+    fun visibleClips(session: SleepSession?): List<SoundClip> {
+        val all = session?.clips ?: return emptyList()
+        return all
+            .filter { kindFilter == null || it.eventKind == kindFilter }
+            .filter { !starredOnly || it.starred }
+            .let { list ->
+                when (sort) {
+                    ClipSort.TIME -> list.sortedBy { it.startedAtMs }
+                    ClipSort.LOUDEST -> list.sortedByDescending { it.peakDb }
+                }
+            }
+    }
+
+    fun countsByKind(session: SleepSession?): Map<EventKind, Int> =
+        session?.clips?.groupingBy { it.eventKind }?.eachCount() ?: emptyMap()
+
+    fun setSort(value: ClipSort) { sort = value }
+
+    fun setKindFilter(value: EventKind?) {
+        kindFilter = if (kindFilter == value) null else value
+    }
+
+    fun setStarredOnly(value: Boolean) { starredOnly = value }
+
+    fun playClip(clip: SoundClip, queue: List<SoundClip>) = player.toggle(clip, queue)
+
+    /** The night's loudest moments, back to back. */
+    fun playHighlights(session: SleepSession, limit: Int = 12) {
+        val reel = session.loudestClips(limit).sortedBy { it.startedAtMs }
+        if (reel.isEmpty()) return
+        player.play(reel.first(), reel)
+    }
+
+    fun toggleStar(session: SleepSession, clip: SoundClip) {
+        val updated = store.setStarred(session, clip.fileName, !clip.starred)
+        replace(updated)
+    }
+
+    fun deleteClip(session: SleepSession, clip: SoundClip) {
+        if (player.current?.fileName == clip.fileName) player.stop()
+        replace(store.deleteClip(session, clip.fileName))
+    }
+
+    /**
+     * A share sheet for one recording. Goes through FileProvider because the clips live in the
+     * app's private storage, which other apps cannot read directly.
+     */
+    fun shareIntent(clip: SoundClip): Intent? {
+        val context = getApplication<Application>()
+        val file = store.clipFile(clip.fileName)
+        if (!file.exists()) return null
+        val uri = runCatching {
+            FileProvider.getUriForFile(context, "${context.packageName}.clips", file)
+        }.getOrNull() ?: return null
+
+        return Intent(Intent.ACTION_SEND).apply {
+            type = "audio/wav"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+    }
 
     // ---- editing a night ----
 
@@ -89,79 +153,40 @@ class SleepViewModel(app: Application) : AndroidViewModel(app) {
     fun setRating(session: SleepSession, stars: Int) =
         persist(session.copy(ratingStars = if (session.ratingStars == stars) 0 else stars))
 
-    fun delete(session: SleepSession) {
-        stopClip()
+    fun deleteSession(session: SleepSession) {
+        player.stop()
         store.delete(session)
+        selectedSessionId = null
         refresh()
     }
 
     private fun persist(updated: SleepSession) {
         store.save(updated)
+        replace(updated)
+    }
+
+    private fun replace(updated: SleepSession) {
         sessions = sessions.map { if (it.id == updated.id) updated else it }
     }
 
     // ---- settings ----
 
-    fun setAlarmTime(hour: Int, minute: Int) {
-        alarmHour = hour; settings.alarmHour = hour
-        alarmMinute = minute; settings.alarmMinute = minute
+    fun updateSettings(transform: SettingsSnapshot.() -> SettingsSnapshot) {
+        val next = settings.transform()
+        next.writeTo(settingsStore)
+        settings = next
     }
 
-    fun setAlarmEnabled(v: Boolean) { alarmEnabled = v; settings.alarmEnabled = v }
-    fun setWindowMinutes(v: Int) { windowMinutes = v; settings.windowMinutes = v }
-    fun setSnoozeMinutes(v: Int) { snoozeMinutes = v; settings.snoozeMinutes = v }
-    fun setSleepGoalMinutes(v: Int) { sleepGoalMinutes = v; settings.sleepGoalMinutes = v }
-    fun setRecordSnoring(v: Boolean) { recordSnoring = v; settings.recordSnoring = v }
-    fun setMotionSensing(v: Boolean) { motionSensing = v; settings.motionSensing = v }
-    fun setVibrate(v: Boolean) { vibrate = v; settings.vibrate = v }
-    fun setRampSeconds(v: Int) { rampSeconds = v; settings.rampSeconds = v }
-    fun setAutoDeleteDays(v: Int) { autoDeleteDays = v; settings.autoDeleteDays = v }
-    fun setAlarmSoundUri(v: String) { alarmSoundUri = v; settings.alarmSoundUri = v }
+    fun clipBytes(): Long = store.clipBytesOnDisk()
 
-    fun pruneNow() {
-        store.pruneOlderThan(autoDeleteDays)
+    fun cleanUpNow() {
+        store.pruneAudio(settings.clipRetentionDays)
+        store.pruneSessions(settings.nightRetentionDays)
         refresh()
     }
 
-    // ---- clip playback ----
-
-    fun playClip(fileName: String) {
-        if (playingClip == fileName) {
-            stopClip()
-            return
-        }
-        stopClip()
-        player = try {
-            MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                        .build()
-                )
-                setDataSource(clipPath(fileName))
-                setOnCompletionListener { stopClip() }
-                prepare()
-                start()
-            }
-        } catch (e: Exception) {
-            Log.e("SleepViewModel", "Could not play $fileName", e)
-            null
-        }
-        playingClip = if (player != null) fileName else null
-    }
-
-    fun stopClip() {
-        player?.let {
-            runCatching { if (it.isPlaying) it.stop() }
-            runCatching { it.release() }
-        }
-        player = null
-        playingClip = null
-    }
-
     override fun onCleared() {
-        stopClip()
+        player.stop()
         super.onCleared()
     }
 }
