@@ -192,6 +192,12 @@ private fun SleepWaveApp() {
                     onCorrectLabel = { kind ->
                         val clip = vm.player.current
                         if (session != null && clip != null) vm.correctLabel(session, clip, kind)
+                    },
+                    onMuteDetail = { label ->
+                        vm.muteDetail(label)
+                        scope.launch {
+                            snackbars.showSnackbar("\"$label\" will not be recorded again.")
+                        }
                     }
                 )
                 Spacer(Modifier.height(8.dp))

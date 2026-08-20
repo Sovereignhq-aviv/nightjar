@@ -1,10 +1,12 @@
 package org.sovereignhq.sleepwave.ui
 
+import android.content.Context
 import android.content.Intent
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
+import android.provider.OpenableColumns
 import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -39,6 +41,7 @@ import org.sovereignhq.sleepwave.data.Sensitivity
 import org.sovereignhq.sleepwave.service.AlarmScheduler
 import org.sovereignhq.sleepwave.service.SleepService
 import org.sovereignhq.sleepwave.ui.components.HairLine
+import org.sovereignhq.sleepwave.ui.components.MicCheckCard
 import org.sovereignhq.sleepwave.ui.components.LegendDot
 import org.sovereignhq.sleepwave.ui.components.NightCard
 import org.sovereignhq.sleepwave.ui.components.SectionLabel
@@ -50,19 +53,43 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val settings = vm.settings
 
-    val soundPicker = rememberLauncherForActivityResult(
+    val ringtonePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         @Suppress("DEPRECATION")
         val uri: Uri? = result.data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
-        vm.updateSettings { copy(alarmSoundUri = uri?.toString() ?: "") }
+        val label = uri?.let {
+            runCatching { RingtoneManager.getRingtone(context, it)?.getTitle(context) }.getOrNull()
+        }.orEmpty()
+        vm.updateSettings { copy(alarmSoundUri = uri?.toString().orEmpty(), alarmSoundLabel = label) }
     }
 
-    val soundName = remember(settings.alarmSoundUri) {
-        val uri = settings.alarmSoundUri.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
-            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-        runCatching { RingtoneManager.getRingtone(context, uri)?.getTitle(context) }
-            .getOrNull() ?: "Default alarm sound"
+    val filePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            // The grant has to be persisted or the alarm cannot read the file after a reboot, which
+            // would mean a silent alarm on exactly the morning nobody was expecting one.
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            val label = displayNameOf(context, uri)
+            vm.updateSettings { copy(alarmSoundUri = uri.toString(), alarmSoundLabel = label) }
+        }
+    }
+
+    val soundName = remember(settings.alarmSoundUri, settings.alarmSoundLabel) {
+        when {
+            settings.alarmSoundLabel.isNotBlank() -> settings.alarmSoundLabel
+            settings.alarmSoundUri.isBlank() -> "Default alarm sound"
+            else -> runCatching {
+                RingtoneManager.getRingtone(context, Uri.parse(settings.alarmSoundUri))
+                    ?.getTitle(context)
+            }.getOrNull() ?: "Chosen sound"
+        }
     }
 
     Column(
@@ -151,6 +178,35 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
             ) { Text("Clean up now") }
         }
 
+        SectionLabel("Microphone check")
+        NightCard { MicCheckCard() }
+
+        if (settings.mutedLabels.isNotEmpty()) {
+            SectionLabel("Sounds you have muted")
+            NightCard {
+                Text(
+                    "Never recorded again. Everything else is unaffected, so this is not the same " +
+                        "as turning the sensitivity down.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(10.dp))
+                settings.mutedLabels.sorted().forEach { label ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { vm.unmuteDetail(label) }
+                            .padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(label, style = MaterialTheme.typography.titleMedium)
+                        Text("Unmute", color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
+
         SectionLabel("What the labels mean")
         NightCard {
             EventKind.entries.forEach { kind ->
@@ -198,37 +254,62 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
         // ---------------------------------------------------------------- alarm
         SectionLabel("Alarm")
         NightCard {
-            Row(
+            Column(
                 Modifier
                     .fillMaxWidth()
-                    .clickable {
+                    .padding(vertical = 4.dp)
+            ) {
+                Text("Alarm sound", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    soundName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = {
                         val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
-                            putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALARM)
+                            // TYPE_ALL rather than TYPE_ALARM: on most phones the good sounds are
+                            // filed as ringtones, and there is no reason to hide them.
+                            putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALL)
                             putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE, "Alarm sound")
                             putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
                             putExtra(
                                 RingtoneManager.EXTRA_RINGTONE_EXISTING_URI,
-                                settings.alarmSoundUri.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }
+                                settings.alarmSoundUri.takeIf { it.isNotBlank() }
+                                    ?.let { Uri.parse(it) }
                             )
                         }
-                        runCatching { soundPicker.launch(intent) }
-                    }
-                    .padding(vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(Modifier.fillMaxWidth(0.75f)) {
-                    Text("Alarm sound", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        soundName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Text("Change", color = MaterialTheme.colorScheme.primary)
+                        runCatching { ringtonePicker.launch(intent) }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                ) { Text("Phone sounds") }
+
+                OutlinedButton(
+                    onClick = { runCatching { filePicker.launch(arrayOf("audio/*")) } },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                ) { Text("A song file") }
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "A song file means any MP3 or M4A on the phone, so a downloaded track works as an " +
+                    "alarm. Spotify cannot be used directly: it gives no other app a way to play a " +
+                    "track, and an alarm that needs a login and a live connection at 07:00 is not " +
+                    "an alarm. Download the song and pick the file instead.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(Modifier.height(14.dp))
             HairLine()
             Spacer(Modifier.height(14.dp))
 
@@ -512,3 +593,10 @@ private fun StatusRow(title: String, ok: Boolean, detail: String, onClick: () ->
         )
     }
 }
+
+/** The file name behind a content:// URI, so a chosen song shows its own name in Settings. */
+private fun displayNameOf(context: Context, uri: Uri): String = runCatching {
+    context.contentResolver
+        .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+        ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+}.getOrNull() ?: "Chosen audio file"

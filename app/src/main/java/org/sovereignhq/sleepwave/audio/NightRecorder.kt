@@ -70,6 +70,18 @@ class NightRecorder(
     @Volatile var lastLevel: Float = 0f
         private set
 
+    /** Which input the phone actually gave us. Recorded so a silent night can be explained. */
+    @Volatile var audioSource: String = "not started"
+        private set
+
+    /** Frames actually read. Zero after a whole night means the microphone was never really live. */
+    @Volatile var framesRead: Long = 0L
+        private set
+
+    /** Quietest background level seen, in dBFS. Near -90 means the microphone heard nothing at all. */
+    @Volatile var quietestFloorDb: Float = 0f
+        private set
+
     private val fft = Fft(FRAME)
     private val mags = FloatArray(FRAME / 2)
     private val floatFrame = FloatArray(FRAME)
@@ -130,35 +142,63 @@ class NightRecorder(
         // Two seconds of slack absorbs any hiccup while a clip is being copied out.
         val bufferSize = max(minBuf * 4, SAMPLE_RATE * 2 * 2)
 
-        val record = try {
-            AudioRecord(
-                MediaRecorder.AudioSource.MIC,
-                SAMPLE_RATE,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize
-            )
-        } catch (e: Exception) {
-            listener.onError("Could not open the microphone: ${e.message}")
+        // Which input we ask for matters more than anything else in this file.
+        //
+        // AudioSource.MIC runs the phone's own noise suppression and automatic gain control, and
+        // those are built to remove precisely what this app listens for: quiet, steady, non-speech
+        // sound. Worse, several manufacturers switch DSP profiles when the screen goes off, which is
+        // exactly how a night comes back empty while everything appears to be working.
+        //
+        // UNPROCESSED is the raw signal with no processing at all. VOICE_RECOGNITION at least turns
+        // AGC and noise suppression off on most devices. MIC is the last resort.
+        var opened: AudioRecord? = null
+        var openedLabel = ""
+        for ((source, label) in PREFERRED_SOURCES) {
+            val candidate = try {
+                AudioRecord(
+                    source,
+                    SAMPLE_RATE,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    bufferSize
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "Audio source $label unavailable", e)
+                null
+            }
+            if (candidate == null) continue
+
+            if (candidate.state != AudioRecord.STATE_INITIALIZED) {
+                runCatching { candidate.release() }
+                continue
+            }
+
+            val started = try {
+                candidate.startRecording()
+                candidate.recordingState == AudioRecord.RECORDSTATE_RECORDING
+            } catch (e: Exception) {
+                Log.w(TAG, "Audio source $label would not start", e)
+                false
+            }
+
+            if (started) {
+                opened = candidate
+                openedLabel = label
+                break
+            }
+            runCatching { candidate.stop() }
+            runCatching { candidate.release() }
+        }
+
+        val record = opened
+        if (record == null) {
+            listener.onError("Could not open the microphone. Another app may be holding it.")
             running = false
             return
         }
 
-        if (record.state != AudioRecord.STATE_INITIALIZED) {
-            record.release()
-            listener.onError("The microphone is busy or permission was denied.")
-            running = false
-            return
-        }
-
-        try {
-            record.startRecording()
-        } catch (e: Exception) {
-            record.release()
-            listener.onError("Could not start recording: ${e.message}")
-            running = false
-            return
-        }
+        audioSource = openedLabel
+        Log.i(TAG, "Recording from $openedLabel")
 
         try {
             while (running) {
@@ -189,6 +229,9 @@ class NightRecorder(
 
                 floorDb += if (db < floorDb) (db - floorDb) * 0.06f else (db - floorDb) * 0.0006f
                 floorDb = floorDb.coerceIn(-90f, -20f)
+
+                framesRead++
+                if (framesRead == 1L || floorDb < quietestFloorDb) quietestFloorDb = floorDb
 
                 fft.magnitudes(floatFrame, 0, mags)
 
@@ -321,6 +364,16 @@ class NightRecorder(
     }
 
     companion object {
+        /**
+         * Tried in order. The first that opens and actually starts wins, and which one it was gets
+         * reported so an empty night can be explained rather than guessed at.
+         */
+        private val PREFERRED_SOURCES = listOf(
+            MediaRecorder.AudioSource.UNPROCESSED to "unprocessed",
+            MediaRecorder.AudioSource.VOICE_RECOGNITION to "voice-recognition",
+            MediaRecorder.AudioSource.MIC to "mic"
+        )
+
         const val SAMPLE_RATE = 16_000
         const val FRAME = 512
         const val FRAME_MS = FRAME * 1000L / SAMPLE_RATE   // 32 ms

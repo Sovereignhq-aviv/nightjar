@@ -68,6 +68,7 @@ class SleepService : Service(), NightRecorder.Listener, EventDetector.Listener {
     private var lastClipMs = 0L
     private var lastNotificationMs = 0L
     private var eventCount = 0
+    private var resumed = false
 
     private val tracking = AtomicBoolean(false)
     private val sessionSaved = AtomicBoolean(false)
@@ -95,7 +96,21 @@ class SleepService : Service(), NightRecorder.Listener, EventDetector.Listener {
             ACTION_FIRE_ALARM -> fireAlarm(smart = false, reason = "Scheduled time")
             ACTION_SNOOZE -> snooze()
             ACTION_DISMISS -> dismiss()
-            else -> if (!tracking.get() && !player.isPlaying) stopSelf()
+            else -> {
+                // START_STICKY hands us a null intent when Android restarts the service after
+                // killing it. Treating that as "nothing to do" is how a night silently ended: the
+                // process comes back, finds no reason to exist and stops. If a night was in flight,
+                // pick it back up instead.
+                val interrupted = settings.activeSessionId
+                if (!tracking.get() && !player.isPlaying) {
+                    if (interrupted.isNotBlank()) {
+                        Log.w(TAG, "Restarted after being killed - resuming $interrupted")
+                        startTracking(resumeSessionId = interrupted)
+                    } else {
+                        stopSelf()
+                    }
+                }
+            }
         }
         return START_STICKY
     }
@@ -104,18 +119,29 @@ class SleepService : Service(), NightRecorder.Listener, EventDetector.Listener {
 
     // ---------------------------------------------------------------- tracking
 
-    private fun startTracking() {
+    private fun startTracking(resumeSessionId: String? = null) {
         if (tracking.get()) return
 
         val sensitivity = settings.sensitivity
         startedAtMs = System.currentTimeMillis()
-        sessionId = "session_$startedAtMs"
+        resumed = resumeSessionId != null
+        // Reusing the id keeps one entry per night. The minutes before the kill are genuinely gone -
+        // they only ever existed in memory - so the saved night covers from here, and says so.
+        sessionId = resumeSessionId ?: "session_$startedAtMs"
         windowMinutes = settings.windowMinutes
-        alarmTargetMs = if (settings.alarmEnabled) settings.nextAlarmTimeMs(startedAtMs) else 0L
+        alarmTargetMs = when {
+            resumeSessionId != null && settings.activeAlarmTargetMs > System.currentTimeMillis() ->
+                settings.activeAlarmTargetMs
+            settings.alarmEnabled -> settings.nextAlarmTimeMs(startedAtMs)
+            else -> 0L
+        }
         nextMinuteBoundaryMs = startedAtMs + 60_000
         maxClips = sensitivity.maxClipsPerNight
         detector = EventDetector(sensitivity.triggerDb, this)
         breath = BreathEstimator()
+        // A fresh recorder every night: stopping one shuts down its disk-writer thread for good, so
+        // reusing the instance after a resume would silently drop every clip.
+        recorder = NightRecorder(store.clipsDir, this, soundClassifier)
         samples.clear()
         clips.clear()
         snoreMinutes = 0
@@ -201,6 +227,15 @@ class SleepService : Service(), NightRecorder.Listener, EventDetector.Listener {
         detail: String,
         confidence: Float
     ) {
+        // Muting happens here rather than at trigger time because the label only exists once the
+        // model has seen the clip. The file is written and then removed, which costs a few hundred
+        // KB of churn and saves scrolling past forty recordings of a fan.
+        if (detail.isNotBlank() && detail in settings.mutedLabels) {
+            runCatching { store.clipFile(fileName).delete() }
+            Log.i(TAG, "Discarded a muted sound: $detail")
+            return
+        }
+
         clips.add(
             SoundClip(
                 fileName = fileName,
@@ -377,11 +412,28 @@ class SleepService : Service(), NightRecorder.Listener, EventDetector.Listener {
             wokeSmart = wokeSmart,
             samples = samples.toList(),
             clips = clips.toList(),
-            snoreMinutes = snoreMinutes
+            snoreMinutes = snoreMinutes,
+            diagnostics = buildDiagnostics()
         )
         val classified = raw.copy(samples = SleepClassifier.classify(raw))
         store.save(classified)
         return classified
+    }
+
+    /**
+     * A one-line account of what the hardware actually did. Written every night and shown when the
+     * morning comes back empty, because "no recordings" has several very different causes and
+     * guessing between them from the sofa is hopeless.
+     */
+    private fun buildDiagnostics(): String = buildString {
+        append("input=${recorder.audioSource}")
+        append(" frames=${recorder.framesRead}")
+        append(" quietest=${recorder.quietestFloorDb.toInt()}dB")
+        append(" events=$eventCount")
+        append(" clips=${clips.size}")
+        append(" sensitivity=${settings.sensitivity.name}")
+        if (!settings.recordSounds) append(" recording=off")
+        if (resumed) append(" resumed-after-kill")
     }
 
     /** After a service restart the in-memory night is gone; keep whatever was already on disk. */
@@ -409,7 +461,10 @@ class SleepService : Service(), NightRecorder.Listener, EventDetector.Listener {
     /** Refreshed sparingly - redrawing a notification every minute all night costs battery. */
     private fun updateNotification(text: String, force: Boolean) {
         val now = System.currentTimeMillis()
-        if (!force && now - lastNotificationMs < NOTIFICATION_INTERVAL_MS) return
+        // Frequent for the first few minutes so that pulling down the shade right after starting
+        // proves it is alive, then sparingly for the rest of the night to save battery.
+        val interval = if (samples.size <= SETTLING_MINUTES) 60_000L else NOTIFICATION_INTERVAL_MS
+        if (!force && now - lastNotificationMs < interval) return
         lastNotificationMs = now
         getSystemService(NotificationManager::class.java)
             ?.notify(Notifications.ID_TRACKING, Notifications.tracking(this, text))
@@ -477,6 +532,7 @@ class SleepService : Service(), NightRecorder.Listener, EventDetector.Listener {
         private const val TAG = "SleepService"
         private const val MAX_NIGHT_MS = 13L * 60L * 60L * 1000L
         private const val NOTIFICATION_INTERVAL_MS = 5L * 60L * 1000L
+        private const val SETTLING_MINUTES = 4
         private const val MIN_SAVEABLE_MINUTES = 10
 
         /** Long enough that one snore does not become three clips, short enough to catch a lot. */

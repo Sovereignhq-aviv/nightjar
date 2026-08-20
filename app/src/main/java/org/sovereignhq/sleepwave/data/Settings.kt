@@ -98,6 +98,26 @@ class Settings(context: Context) {
         set(v) = prefs.edit().putString("alarm_sound_uri", v).apply()
 
     /**
+     * Friendly name for [alarmSoundUri]. Stored rather than looked up because a document picked from
+     * storage has no title a RingtoneManager can read, and re-querying the content resolver on every
+     * recomposition to draw one row of settings would be absurd.
+     */
+    var alarmSoundLabel: String
+        get() = prefs.getString("alarm_sound_label", "") ?: ""
+        set(v) = prefs.edit().putString("alarm_sound_label", v).apply()
+
+    /**
+     * Model labels never worth recording again - "Air conditioning", "Mechanical fan". Separated by
+     * a pipe because several AudioSet names contain commas ("Thump, thud").
+     */
+    var mutedLabels: Set<String>
+        get() = (prefs.getString("muted_labels", "") ?: "")
+            .split("|")
+            .filter { it.isNotBlank() }
+            .toSet()
+        set(v) = prefs.edit().putString("muted_labels", v.joinToString("|")).apply()
+
+    /**
      * Audio is the expensive thing on disk, so it goes first and it goes quickly.
      * Starred clips are exempt.
      */
@@ -149,6 +169,8 @@ class Settings(context: Context) {
         vibrate = vibrate,
         rampSeconds = rampSeconds,
         alarmSoundUri = alarmSoundUri,
+        alarmSoundLabel = alarmSoundLabel,
+        mutedLabels = mutedLabels,
         clipRetentionDays = clipRetentionDays,
         nightRetentionDays = nightRetentionDays
     )
@@ -174,6 +196,8 @@ data class SettingsSnapshot(
     val vibrate: Boolean,
     val rampSeconds: Int,
     val alarmSoundUri: String,
+    val alarmSoundLabel: String,
+    val mutedLabels: Set<String>,
     val clipRetentionDays: Int,
     val nightRetentionDays: Int
 ) {
@@ -190,6 +214,8 @@ data class SettingsSnapshot(
         settings.vibrate = vibrate
         settings.rampSeconds = rampSeconds
         settings.alarmSoundUri = alarmSoundUri
+        settings.alarmSoundLabel = alarmSoundLabel
+        settings.mutedLabels = mutedLabels
         settings.clipRetentionDays = clipRetentionDays
         settings.nightRetentionDays = nightRetentionDays
     }

@@ -120,6 +120,20 @@ class SleepViewModel(app: Application) : AndroidViewModel(app) {
         replace(store.setUserLabel(session, clip.fileName, kind.name))
     }
 
+    /**
+     * Stops recording a specific sound the model can name. The most useful thing you can do with a
+     * loose sensitivity setting: one tap on "Air conditioning" and the list stops filling with it,
+     * without making the app deafer to everything else.
+     */
+    fun muteDetail(label: String) {
+        if (label.isBlank()) return
+        updateSettings { copy(mutedLabels = mutedLabels + label) }
+    }
+
+    fun unmuteDetail(label: String) {
+        updateSettings { copy(mutedLabels = mutedLabels - label) }
+    }
+
     /** How many corrections exist across every night - the size of the training set so far. */
     fun correctionCount(): Int = sessions.sumOf { night -> night.clips.count { it.wasCorrected } }
 

@@ -1,6 +1,7 @@
 package org.sovereignhq.sleepwave.alarm
 
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
@@ -83,6 +84,19 @@ class AlarmActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Either volume key snoozes. Finding a button on a screen at 07:00 with one eye open is harder
+     * than pressing the side of the phone, and this is how every other alarm on the platform behaves.
+     */
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+            SleepService.send(this, SleepService.ACTION_SNOOZE)
+            finish()
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
     companion object {
         /** Set by the alarm backstop, meaning "the service was gone, you are the entry point". */
         const val ACTION_RESCUE = "org.sovereignhq.sleepwave.RESCUE"
@@ -116,7 +130,7 @@ private fun AlarmScreen(onSnooze: () -> Unit, onStop: () -> Unit) {
         Text(formatClock(now), style = MaterialTheme.typography.displayLarge)
         Spacer(Modifier.height(12.dp))
         Text(
-            "Your night is saved. Open SleepWave to hear what it caught.",
+            "Your night is saved. Press either volume button to snooze.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center

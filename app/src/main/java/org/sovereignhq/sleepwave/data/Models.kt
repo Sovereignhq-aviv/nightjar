@@ -108,7 +108,13 @@ data class SleepSession(
     val tags: List<String> = emptyList(),
     val note: String = "",
     /** How the user says they feel, 0 = unrated, 1..5 stars. */
-    val ratingStars: Int = 0
+    val ratingStars: Int = 0,
+    /**
+     * What the hardware actually did: which microphone input was granted, how many frames arrived,
+     * the quietest level heard. Shown when a night comes back empty, because "no recordings" has
+     * several very different causes and they are indistinguishable without this.
+     */
+    val diagnostics: String = ""
 ) {
     fun loudestClips(limit: Int): List<SoundClip> =
         clips.sortedByDescending { it.peakDb }.take(limit)

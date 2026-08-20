@@ -43,7 +43,7 @@ import androidx.compose.ui.unit.dp
 import org.sovereignhq.sleepwave.data.ALL_TAGS
 import org.sovereignhq.sleepwave.data.SleepSession
 import org.sovereignhq.sleepwave.service.AlarmScheduler
-import org.sovereignhq.sleepwave.ui.components.AlarmDial
+import org.sovereignhq.sleepwave.ui.components.TimeWheel
 import org.sovereignhq.sleepwave.ui.components.EmptyState
 import org.sovereignhq.sleepwave.ui.components.Hypnogram
 import org.sovereignhq.sleepwave.ui.components.HypnogramAxis
@@ -96,10 +96,9 @@ fun SleepScreen(
 
             Spacer(Modifier.height(10.dp))
 
-            AlarmDial(
+            TimeWheel(
                 hour = settings.alarmHour,
                 minute = settings.alarmMinute,
-                windowMinutes = settings.windowMinutes,
                 enabled = settings.alarmEnabled,
                 onChange = { h, m ->
                     vm.updateSettings { copy(alarmHour = h, alarmMinute = m) }
@@ -107,12 +106,12 @@ fun SleepScreen(
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(18.dp))
 
             Text(
                 text = if (settings.windowMinutes > 0) {
-                    "The band on the dial is when it might wake you - it picks the lightest moment " +
-                        "inside it."
+                    "Might wake you any time from ${earliestWake(settings.alarmHour, settings.alarmMinute, settings.windowMinutes)}, " +
+                        "whenever you are sleeping lightest."
                 } else {
                     "Rings exactly on time. No smart window."
                 },
@@ -184,6 +183,11 @@ fun SleepScreen(
         }
 
         LastNight(vm, session)
+
+        if (session.clips.isEmpty() && session.diagnostics.isNotBlank()) {
+            SilentNightReport(session.diagnostics)
+        }
+
         Spacer(Modifier.height(24.dp))
     }
 }
@@ -376,6 +380,67 @@ private fun LastNight(vm: SleepViewModel, session: SleepSession) {
             dismissButton = {
                 TextButton(onClick = { confirmingDelete = false }) { Text("Keep") }
             }
+        )
+    }
+}
+
+/** The earliest the smart alarm might go off, for the caption under the wheels. */
+private fun earliestWake(hour: Int, minute: Int, windowMinutes: Int): String {
+    val total = (hour * 60 + minute - windowMinutes + 24 * 60) % (24 * 60)
+    return formatHourMinute(total / 60, total % 60)
+}
+
+/**
+ * Shown only when a night produced no recordings at all.
+ *
+ * "Nothing was recorded" has several completely different causes - the microphone was never granted,
+ * the phone was buried under a duvet, the sensitivity was too strict, recording was switched off, the
+ * service got killed - and they are indistinguishable from the sofa the next morning. So the app says
+ * what the hardware actually did instead of leaving it to guesswork.
+ */
+@Composable
+private fun SilentNightReport(diagnostics: String) {
+    val fields = remember(diagnostics) {
+        diagnostics.split(" ").mapNotNull { part ->
+            val bits = part.split("=", limit = 2)
+            if (bits.size == 2) bits[0] to bits[1] else null
+        }.toMap()
+    }
+    val frames = fields["frames"]?.toLongOrNull() ?: 0L
+    val quietest = fields["quietest"]?.removeSuffix("dB")?.toIntOrNull() ?: 0
+    val input = fields["input"] ?: "unknown"
+
+    val verdict = when {
+        diagnostics.contains("recording=off") ->
+            "Recording was switched off in Settings, so only the sleep graph was kept."
+        frames == 0L ->
+            "The microphone never delivered any audio at all. Another app may have been holding " +
+                "it, or the permission was withdrawn mid-night."
+        quietest <= -80 ->
+            "The microphone was live but heard almost nothing - a floor of ${quietest}dB is close " +
+                "to digital silence. That is the signature of a blocked microphone: face-down on a " +
+                "soft duvet, or under a pillow. Try the microphone check in Settings, in the " +
+                "position you actually sleep in."
+        diagnostics.contains("events=0") ->
+            "The room was audible but nothing crossed the threshold. Either a genuinely quiet " +
+                "night, or the sensitivity is set too strict for this room."
+        else ->
+            "Sounds were detected but none were saved. If this repeats, the clip limit or the " +
+                "cooldown is the likely cause."
+    }
+
+    SectionLabel("Why there are no recordings")
+    NightCard {
+        Text(
+            verdict,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.tertiary
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "Input granted: $input  ·  frames: $frames  ·  quietest: ${quietest}dB",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }

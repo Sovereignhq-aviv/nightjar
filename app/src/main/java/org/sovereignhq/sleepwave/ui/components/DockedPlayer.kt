@@ -31,8 +31,10 @@ import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
+import androidx.compose.material.icons.rounded.VolumeOff
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -75,6 +77,7 @@ fun DockedPlayer(
     onShare: () -> Unit,
     onClose: () -> Unit,
     onCorrectLabel: (EventKind) -> Unit,
+    onMuteDetail: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -157,6 +160,26 @@ fun DockedPlayer(
                                             tint = MaterialTheme.colorScheme.primary
                                         )
                                     }
+                                }
+                            )
+                        }
+
+                        // The single most useful thing to do with a loose sensitivity setting: name
+                        // the thing filling the list and stop recording just that.
+                        if (shown.detail.isNotBlank()) {
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("Stop recording \"${shown.detail}\"") },
+                                onClick = {
+                                    menuOpen = false
+                                    onMuteDetail(shown.detail)
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Rounded.VolumeOff,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
                             )
                         }
