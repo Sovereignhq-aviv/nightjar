@@ -302,9 +302,9 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
             Spacer(Modifier.height(10.dp))
             Text(
                 "A song file means any MP3 or M4A on the phone, so a downloaded track works as an " +
-                    "alarm. Spotify cannot be used directly: it gives no other app a way to play a " +
-                    "track, and an alarm that needs a login and a live connection at 07:00 is not " +
-                    "an alarm. Download the song and pick the file instead.",
+                    "alarm. Spotify is not wired up yet: it needs a one-time account authorisation, " +
+                    "Spotify Premium, and their app installed. Until then, a downloaded file is the " +
+                    "reliable route.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

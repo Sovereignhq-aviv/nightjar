@@ -28,10 +28,12 @@ import org.sovereignhq.sleepwave.data.SessionStats
 import org.sovereignhq.sleepwave.data.SleepSession
 import org.sovereignhq.sleepwave.ui.components.Bar
 import org.sovereignhq.sleepwave.ui.components.EmptyState
+import org.sovereignhq.sleepwave.ui.components.HairLine
 import org.sovereignhq.sleepwave.ui.components.NightCard
 import org.sovereignhq.sleepwave.ui.components.SectionLabel
 import org.sovereignhq.sleepwave.ui.components.StatTile
 import org.sovereignhq.sleepwave.ui.components.TrendBars
+import org.sovereignhq.sleepwave.sleep.SnoreTrend
 import org.sovereignhq.sleepwave.ui.theme.DataColors
 import java.util.Calendar
 import kotlin.math.abs
@@ -160,9 +162,38 @@ fun TrendsScreen(
 
         WeekdayBreakdown(paired)
 
-        if (paired.any { it.second.snoreMinutes > 0 }) {
-            SectionLabel("Snoring per night")
+        // Compared week on week rather than across the selected period, so the headline does not
+        // change meaning when the chip above is switched.
+        val snoreHistory = remember(all) { all.map { it.snoreMinutes } }
+        val snoreVerdict = remember(snoreHistory) {
+            val (recentWeek, weekBefore) = SnoreTrend.windows(snoreHistory)
+            SnoreTrend.compare(recentWeek, weekBefore)
+        }
+
+        if (snoreVerdict != null || paired.any { it.second.snoreMinutes > 0 }) {
+            SectionLabel("Snoring")
             NightCard {
+                snoreVerdict?.let { verdict ->
+                    Text(
+                        verdict.headline,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = when (verdict.direction) {
+                            SnoreTrend.Direction.UP -> MaterialTheme.colorScheme.tertiary
+                            SnoreTrend.Direction.DOWN -> MaterialTheme.colorScheme.secondary
+                            SnoreTrend.Direction.STEADY -> MaterialTheme.colorScheme.onSurface
+                        }
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        verdict.detail,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    HairLine()
+                    Spacer(Modifier.height(16.dp))
+                }
+
                 TrendBars(
                     bars = paired.map {
                         Bar(
