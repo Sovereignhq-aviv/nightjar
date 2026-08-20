@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "org.sovereignhq.sleepwave"
+    namespace = "org.sovereignhq.nightjar"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "org.sovereignhq.sleepwave"
+        applicationId = "org.sovereignhq.nightjar"
         // 27 is the floor for setShowWhenLocked / setTurnScreenOn, which the wake-up screen needs
         // in order to appear over the lock screen.
         minSdk = 27

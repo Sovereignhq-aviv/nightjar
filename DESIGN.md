@@ -1,4 +1,4 @@
-# SleepWave design system
+# Nightjar design system
 
 Everything below is implemented in `ui/theme/Theme.kt` and the `ui/components` package. Change it
 there, not per screen.

@@ -25,22 +25,30 @@ jobs:
       - name: Install the platform this app targets
         run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
 
-      # Every build must be signed with the SAME key, or Android refuses to install a new
-      # version over the old one and the user has to uninstall - losing all their recordings.
-      # The key is committed to the repo; if it is ever missing, one is generated and uploaded
-      # so it can be committed.
-      - name: Ensure a stable debug signing key
+      # The signing key lives in a repository secret, never in the repo.
+      #
+      # Every build has to use the same key or Android refuses to install a new version over an old
+      # one. But a published signing key is worse than no key at all: anyone could then sign an APK
+      # that phones accept as an update to this app. Hence the secret.
+      #
+      # Forks and pull requests receive no secrets, so they generate a throwaway key and build fine.
+      # Their APKs simply will not install over one built here, which is the correct outcome.
+      - name: Restore or create the signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.DEBUG_KEYSTORE_B64 }}
         run: |
-          if [ ! -f debug.keystore ]; then
-            echo "No committed keystore - generating one to be committed."
-            keytool -genkeypair -v -keystore debug.keystore \
-              -storepass android -keypass android -alias androiddebugkey \
-              -keyalg RSA -keysize 2048 -validity 10950 \
-              -dname "CN=Android Debug,O=Android,C=US"
+          if [ -n "$KEYSTORE_B64" ]; then
+            printf '%s' "$KEYSTORE_B64" | base64 -d > debug.keystore
+            echo "Signing with the stored key."
+          else
+            echo "No DEBUG_KEYSTORE_B64 secret; generating a throwaway key for this build."
+            keytool -genkeypair -v -keystore debug.keystore -storepass android -keypass android -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10950 -dname "CN=Android Debug,O=Android,C=US"
             echo "GENERATED_KEYSTORE=1" >> "$GITHUB_ENV"
           fi
 
-      - name: Upload the generated keystore so it can be committed
+      # Only when a key had to be invented: publish it as an artifact so it can be stored as the
+      # DEBUG_KEYSTORE_B64 secret, after which every later build signs identically.
+      - name: Upload the generated key so it can become the secret
         if: env.GENERATED_KEYSTORE == '1'
         uses: actions/upload-artifact@v4
         with:
@@ -48,17 +56,16 @@ jobs:
           path: debug.keystore
           if-no-files-found: error
 
-      # YAMNet, Google's AudioSet-trained sound classifier. Fetched at build time rather than
-      # committed, so the repo stays free of binaries.
+      # YAMNet, Google's AudioSet-trained sound classifier (Apache 2.0). Fetched at build time
+      # rather than committed, so the repository holds no binaries at all.
       - name: Fetch the YAMNet model
         run: |
           mkdir -p app/src/main/assets
-          curl -fsSL -o app/src/main/assets/yamnet.tflite \
-            https://storage.googleapis.com/mediapipe-models/audio_classifier/yamnet/float32/1/yamnet.tflite
+          curl -fsSL -o app/src/main/assets/yamnet.tflite https://storage.googleapis.com/mediapipe-models/audio_classifier/yamnet/float32/1/yamnet.tflite
           ls -l app/src/main/assets/yamnet.tflite
 
-      # Pinned rather than using whatever Gradle the runner ships, because Android
-      # Gradle Plugin 8.7 is only compatible with a known Gradle range.
+      # Pinned rather than using whatever Gradle the runner ships, because Android Gradle Plugin 8.7
+      # is only compatible with a known Gradle range.
       - name: Set up Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -73,13 +80,13 @@ jobs:
       - name: Rename for clarity
         run: |
           mkdir -p out
-          cp app/build/outputs/apk/debug/app-debug.apk out/SleepWave.apk
+          cp app/build/outputs/apk/debug/app-debug.apk out/Nightjar.apk
 
       - name: Upload the APK
         uses: actions/upload-artifact@v4
         with:
-          name: SleepWave-apk
-          path: out/SleepWave.apk
+          name: Nightjar-apk
+          path: out/Nightjar.apk
           if-no-files-found: error
 
       - name: Upload test report on failure

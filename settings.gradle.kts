@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "SleepWave"
+rootProject.name = "Nightjar"
 include(":app")

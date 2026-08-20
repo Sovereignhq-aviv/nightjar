@@ -1,4 +1,4 @@
-# SleepWave
+# Nightjar
 
 ## What it is
 

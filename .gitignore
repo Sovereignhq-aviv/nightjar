@@ -10,6 +10,5 @@ captures/
 *.apk
 *.aab
 *.keystore
-!debug.keystore
 out/
 app/src/main/assets/yamnet.tflite
