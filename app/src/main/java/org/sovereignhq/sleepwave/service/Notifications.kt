@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
 import android.media.RingtoneManager
+import android.os.Build
 import org.sovereignhq.sleepwave.MainActivity
 import org.sovereignhq.sleepwave.R
 import org.sovereignhq.sleepwave.alarm.AlarmActivity
@@ -133,6 +134,21 @@ object Notifications {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
+
+    /**
+     * Whether Android will let the wake-up screen appear over the lock screen.
+     *
+     * Android 14 made this a permission that is only granted automatically to apps it recognises as
+     * alarm clocks. Denied, the full-screen intent is silently ignored and the notification shade
+     * becomes the only place with a stop button - which is exactly the failure this checks for.
+     */
+    fun canShowFullScreenAlarm(context: Context): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            context.getSystemService(NotificationManager::class.java)
+                ?.canUseFullScreenIntent() == true
+        } else {
+            true
+        }
 
     fun cancelAlarm(context: Context) {
         context.getSystemService(NotificationManager::class.java)?.cancel(ID_ALARM)

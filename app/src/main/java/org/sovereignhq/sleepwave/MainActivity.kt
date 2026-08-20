@@ -65,6 +65,7 @@ import org.sovereignhq.sleepwave.ui.SleepScreen
 import org.sovereignhq.sleepwave.ui.SleepViewModel
 import org.sovereignhq.sleepwave.ui.SoundsScreen
 import org.sovereignhq.sleepwave.ui.TrendsScreen
+import org.sovereignhq.sleepwave.ui.components.AlarmSurface
 import org.sovereignhq.sleepwave.ui.components.DockedPlayer
 
 class MainActivity : ComponentActivity() {
@@ -100,6 +101,8 @@ private fun SleepWaveApp() {
     }
 
     val tracking by SleepState.tracking.collectAsState()
+    val alarmRinging by SleepState.alarmRinging.collectAsState()
+    val alarmQuiet by SleepState.alarmQuiet.collectAsState()
     val finishedSessionId by SleepState.finishedSessionId.collectAsState()
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -130,6 +133,21 @@ private fun SleepWaveApp() {
     }
 
     LaunchedEffect(tracking) { if (!tracking) vm.refresh() }
+
+    // A ringing alarm outranks everything. This branch is why the notification shade is no longer
+    // the only place with a stop button: Android 14 can refuse the full-screen wake-up activity
+    // permission to appear, and when it does, opening the app has to be enough.
+    if (alarmRinging) {
+        AlarmSurface(
+            puzzleDigits = vm.settings.puzzleDigits,
+            puzzleCount = vm.settings.puzzleCount,
+            quietened = alarmQuiet,
+            onQuieten = { SleepService.send(context, SleepService.ACTION_QUIET) },
+            onSnooze = { SleepService.send(context, SleepService.ACTION_SNOOZE) },
+            onDismiss = { SleepService.send(context, SleepService.ACTION_DISMISS) }
+        )
+        return
+    }
 
     if (tracking) {
         val startedAt by SleepState.startedAtMs.collectAsState()

@@ -26,6 +26,12 @@ class AlarmPlayer(private val context: Context) {
     private var vibrator: Vibrator? = null
     private val handler = Handler(Looper.getMainLooper())
     private var volume = START_VOLUME
+    private var vibrateRequested = false
+
+    /** Silenced on request, but still ringing as far as the alarm is concerned. */
+    @Volatile
+    var isQuiet: Boolean = false
+        private set
     private var step = 0f
     private var ramping: Runnable? = null
 
@@ -56,11 +62,35 @@ class AlarmPlayer(private val context: Context) {
             }
         }
 
+        vibrateRequested = vibrate
+        isQuiet = false
         volume = START_VOLUME
         step = if (rampSeconds > 0) (1f - START_VOLUME) / (rampSeconds * 1000f / RAMP_INTERVAL_MS) else 1f
         scheduleRamp()
 
         if (vibrate) startVibration()
+    }
+
+    /**
+     * Drops the sound to nothing and stops the vibration without ending the alarm.
+     *
+     * For getting out of bed without waking whoever else is in it. Deliberately reversible and
+     * deliberately not a dismissal: the service brings the sound back after a grace period, so
+     * silencing the room can never be mistaken for switching the alarm off.
+     */
+    fun quieten() {
+        isQuiet = true
+        runCatching { player?.setVolume(0f, 0f) }
+        runCatching { vibrator?.cancel() }
+    }
+
+    /** Back to a gentle ramp from near-silence, as if the alarm had just started. */
+    fun restoreVolume() {
+        if (!isQuiet) return
+        isQuiet = false
+        volume = START_VOLUME
+        runCatching { player?.setVolume(volume, volume) }
+        if (vibrateRequested) startVibration()
     }
 
     fun stop() {
@@ -79,6 +109,12 @@ class AlarmPlayer(private val context: Context) {
         val task = object : Runnable {
             override fun run() {
                 val p = player ?: return
+                // Keep ticking while quietened, but do not creep the volume back up - that is the
+                // service's decision to make, once the grace period is over.
+                if (isQuiet) {
+                    handler.postDelayed(this, RAMP_INTERVAL_MS)
+                    return
+                }
                 volume = (volume + step).coerceAtMost(1f)
                 runCatching { p.setVolume(volume, volume) }
                 if (volume < 1f) handler.postDelayed(this, RAMP_INTERVAL_MS)

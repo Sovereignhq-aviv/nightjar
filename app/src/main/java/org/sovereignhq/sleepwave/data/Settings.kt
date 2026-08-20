@@ -92,6 +92,19 @@ class Settings(context: Context) {
         get() = prefs.getInt("ramp_seconds", 45)
         set(v) = prefs.edit().putInt("ramp_seconds", v).apply()
 
+    /**
+     * Digits in each arithmetic puzzle required to switch the alarm off. Zero means no puzzle.
+     * The point is a task a thumb cannot complete while the rest of you stays asleep.
+     */
+    var puzzleDigits: Int
+        get() = prefs.getInt("puzzle_digits", 0)
+        set(v) = prefs.edit().putInt("puzzle_digits", v.coerceIn(0, 3)).apply()
+
+    /** How many puzzles in a row. */
+    var puzzleCount: Int
+        get() = prefs.getInt("puzzle_count", 1)
+        set(v) = prefs.edit().putInt("puzzle_count", v.coerceIn(1, 5)).apply()
+
     /** Empty means "use the system default alarm sound". */
     var alarmSoundUri: String
         get() = prefs.getString("alarm_sound_uri", "") ?: ""
@@ -168,6 +181,8 @@ class Settings(context: Context) {
         motionSensing = motionSensing,
         vibrate = vibrate,
         rampSeconds = rampSeconds,
+        puzzleDigits = puzzleDigits,
+        puzzleCount = puzzleCount,
         alarmSoundUri = alarmSoundUri,
         alarmSoundLabel = alarmSoundLabel,
         mutedLabels = mutedLabels,
@@ -195,6 +210,8 @@ data class SettingsSnapshot(
     val motionSensing: Boolean,
     val vibrate: Boolean,
     val rampSeconds: Int,
+    val puzzleDigits: Int,
+    val puzzleCount: Int,
     val alarmSoundUri: String,
     val alarmSoundLabel: String,
     val mutedLabels: Set<String>,
@@ -213,6 +230,8 @@ data class SettingsSnapshot(
         settings.motionSensing = motionSensing
         settings.vibrate = vibrate
         settings.rampSeconds = rampSeconds
+        settings.puzzleDigits = puzzleDigits
+        settings.puzzleCount = puzzleCount
         settings.alarmSoundUri = alarmSoundUri
         settings.alarmSoundLabel = alarmSoundLabel
         settings.mutedLabels = mutedLabels

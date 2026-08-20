@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import org.sovereignhq.sleepwave.data.ALL_TAGS
 import org.sovereignhq.sleepwave.data.SleepSession
 import org.sovereignhq.sleepwave.service.AlarmScheduler
+import org.sovereignhq.sleepwave.service.Notifications
 import org.sovereignhq.sleepwave.ui.components.TimeWheel
 import org.sovereignhq.sleepwave.ui.components.EmptyState
 import org.sovereignhq.sleepwave.ui.components.Hypnogram
@@ -454,7 +455,8 @@ private fun ReliabilityWarnings(context: Context) {
     val powerManager = context.getSystemService(PowerManager::class.java)
     val batteryUnrestricted = powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
     val exactAlarms = AlarmScheduler.canScheduleExact(context)
-    if (batteryUnrestricted && exactAlarms) return
+    val alarmScreenAllowed = Notifications.canShowFullScreenAlarm(context)
+    if (batteryUnrestricted && exactAlarms && alarmScreenAllowed) return
 
     Column(
         Modifier
@@ -479,6 +481,14 @@ private fun ReliabilityWarnings(context: Context) {
         if (!exactAlarms) {
             Text(
                 "Exact alarms are switched off for this app, so the alarm may fire late.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (!alarmScreenAllowed) {
+            Text(
+                "The wake-up screen is blocked, so the alarm can only be stopped from the " +
+                    "notification shade. Settings has a one-tap fix.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

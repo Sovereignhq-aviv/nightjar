@@ -43,6 +43,10 @@ object SleepState {
     private val _alarmRinging = MutableStateFlow(false)
     val alarmRinging: StateFlow<Boolean> = _alarmRinging.asStateFlow()
 
+    /** Ringing, but silenced on request. */
+    private val _alarmQuiet = MutableStateFlow(false)
+    val alarmQuiet: StateFlow<Boolean> = _alarmQuiet.asStateFlow()
+
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
@@ -77,7 +81,12 @@ object SleepState {
     fun setSnoreMinutes(v: Int) { _snoreMinutes.value = v }
     fun setClipCount(v: Int) { _clipCount.value = v }
     fun setEventCount(v: Int) { _eventCount.value = v }
-    fun setAlarmRinging(v: Boolean) { _alarmRinging.value = v }
+    fun setAlarmRinging(v: Boolean) {
+        _alarmRinging.value = v
+        if (!v) _alarmQuiet.value = false
+    }
+
+    fun setAlarmQuiet(v: Boolean) { _alarmQuiet.value = v }
     fun setError(message: String?) { _error.value = message }
     fun consumeFinishedSession() { _finishedSessionId.value = null }
 }

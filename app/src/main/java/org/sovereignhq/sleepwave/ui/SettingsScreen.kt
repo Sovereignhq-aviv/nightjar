@@ -38,7 +38,9 @@ import androidx.compose.ui.unit.dp
 import org.sovereignhq.sleepwave.audio.AudioSetLabels
 import org.sovereignhq.sleepwave.data.EventKind
 import org.sovereignhq.sleepwave.data.Sensitivity
+import org.sovereignhq.sleepwave.alarm.PuzzleGenerator
 import org.sovereignhq.sleepwave.service.AlarmScheduler
+import org.sovereignhq.sleepwave.service.Notifications
 import org.sovereignhq.sleepwave.service.SleepService
 import org.sovereignhq.sleepwave.ui.components.HairLine
 import org.sovereignhq.sleepwave.ui.components.MicCheckCard
@@ -343,6 +345,59 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
             )
 
             Spacer(Modifier.height(18.dp))
+            HairLine()
+            Spacer(Modifier.height(16.dp))
+
+            SectionLabel("Sums before it switches off")
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "A puzzle you cannot solve with a thumb while the rest of you stays asleep. " +
+                    "Snoozing never needs one, and there is always a button that silences the alarm " +
+                    "immediately without switching it off, so you can get up without waking anyone.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(0 to "Off", 1 to "1 digit", 2 to "2 digits", 3 to "3 digits")
+                    .forEach { (digits, label) ->
+                        val selected = settings.puzzleDigits == digits
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    if (selected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.surfaceVariant
+                                )
+                                .clickable { vm.updateSettings { copy(puzzleDigits = digits) } }
+                                .padding(vertical = 15.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (selected) MaterialTheme.colorScheme.onPrimary
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+            }
+
+            if (settings.puzzleDigits > 0) {
+                Spacer(Modifier.height(16.dp))
+                SliderRow(
+                    title = "How many",
+                    value = settings.puzzleCount.toFloat(),
+                    range = 1f..3f,
+                    steps = 1,
+                    display = PuzzleGenerator.describe(settings.puzzleDigits, settings.puzzleCount),
+                    subtitle = null,
+                    onChange = { v -> vm.updateSettings { copy(puzzleCount = v.roundToInt()) } }
+                )
+            }
+
+            Spacer(Modifier.height(18.dp))
             OutlinedButton(
                 onClick = { SleepService.send(context, SleepService.ACTION_FIRE_ALARM) },
                 modifier = Modifier.fillMaxWidth().height(48.dp)
@@ -437,6 +492,32 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
                         runCatching {
                             context.startActivity(
                                 Intent(AndroidSettings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                                    .setData(Uri.parse("package:${context.packageName}"))
+                            )
+                        }
+                    }
+                }
+            )
+
+            Spacer(Modifier.height(14.dp))
+            HairLine()
+            Spacer(Modifier.height(14.dp))
+
+            val canShowAlarmScreen = Notifications.canShowFullScreenAlarm(context)
+            StatusRow(
+                title = "Wake-up screen allowed",
+                ok = canShowAlarmScreen,
+                detail = if (canShowAlarmScreen) {
+                    "The alarm can put its own screen in front of you."
+                } else {
+                    "Android is blocking the wake-up screen, so the alarm can only be stopped from " +
+                        "the notification shade. Tap to allow it."
+                },
+                onClick = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        runCatching {
+                            context.startActivity(
+                                Intent(AndroidSettings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT)
                                     .setData(Uri.parse("package:${context.packageName}"))
                             )
                         }

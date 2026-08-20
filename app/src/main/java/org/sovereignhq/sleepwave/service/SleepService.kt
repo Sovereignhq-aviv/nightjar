@@ -95,6 +95,7 @@ class SleepService : Service(), NightRecorder.Listener, EventDetector.Listener {
             ACTION_STOP -> stopTracking(userInitiated = true)
             ACTION_FIRE_ALARM -> fireAlarm(smart = false, reason = "Scheduled time")
             ACTION_SNOOZE -> snooze()
+            ACTION_QUIET -> quieten()
             ACTION_DISMISS -> dismiss()
             else -> {
                 // START_STICKY hands us a null intent when Android restarts the service after
@@ -368,8 +369,32 @@ class SleepService : Service(), NightRecorder.Listener, EventDetector.Listener {
         runCatching { Notifications.alarmScreenIntent(this).send() }
     }
 
+    /**
+     * Silences a ringing alarm without dismissing it, then brings it back if nothing else happens.
+     *
+     * The restore is the important half. Without it "quiet" would be an undocumented way to switch
+     * the alarm off by walking away, which is precisely what an alarm must not offer.
+     */
+    private fun quieten() {
+        if (!player.isPlaying || player.isQuiet) return
+        player.quieten()
+        SleepState.setAlarmQuiet(true)
+        main.removeCallbacks(restoreSound)
+        main.postDelayed(restoreSound, QUIET_GRACE_MS)
+        updateNotification("Alarm silenced - still waiting for you", force = true)
+    }
+
+    private val restoreSound = Runnable {
+        if (player.isPlaying && player.isQuiet) {
+            player.restoreVolume()
+            SleepState.setAlarmQuiet(false)
+            updateNotification("Alarm ringing", force = true)
+        }
+    }
+
     private fun snooze() {
         if (!player.isPlaying) return
+        main.removeCallbacks(restoreSound)
         player.stop()
         SleepState.setAlarmRinging(false)
         Notifications.cancelAlarm(this)
@@ -383,6 +408,7 @@ class SleepService : Service(), NightRecorder.Listener, EventDetector.Listener {
     }
 
     private fun dismiss() {
+        main.removeCallbacks(restoreSound)
         AlarmScheduler.cancel(this)
         if (tracking.get()) {
             stopTracking(userInitiated = true)
@@ -528,11 +554,15 @@ class SleepService : Service(), NightRecorder.Listener, EventDetector.Listener {
         const val ACTION_FIRE_ALARM = "org.sovereignhq.sleepwave.FIRE_ALARM"
         const val ACTION_SNOOZE = "org.sovereignhq.sleepwave.SNOOZE"
         const val ACTION_DISMISS = "org.sovereignhq.sleepwave.DISMISS"
+        const val ACTION_QUIET = "org.sovereignhq.sleepwave.QUIET"
 
         private const val TAG = "SleepService"
         private const val MAX_NIGHT_MS = 13L * 60L * 60L * 1000L
         private const val NOTIFICATION_INTERVAL_MS = 5L * 60L * 1000L
         private const val SETTLING_MINUTES = 4
+
+        /** How long a silenced alarm stays silent before it insists again. */
+        private const val QUIET_GRACE_MS = 90_000L
         private const val MIN_SAVEABLE_MINUTES = 10
 
         /** Long enough that one snore does not become three clips, short enough to catch a lot. */
