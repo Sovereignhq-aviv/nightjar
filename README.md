@@ -3,8 +3,13 @@
 An Android app that listens to your bedroom overnight, records the things that stand out, and wakes
 you during light sleep instead of at a fixed time.
 
-**No account, no internet, no analytics, no subscription.** Audio is analysed on the phone and
-continuously thrown away. Nothing is uploaded anywhere, because there is nowhere to upload it to.
+**No account, no analytics, no subscription.** Audio is analysed on the phone and continuously
+thrown away. Nothing is ever uploaded, because there is nowhere to upload it to.
+
+The app makes exactly one kind of network request, and only if you leave it switched on: an
+unauthenticated GET to GitHub's public releases API, asking what the newest version is. No
+identifier, no device details, nothing about your recordings. Turn it off in Settings and Nightjar
+makes no network requests at all.
 
 Named after the bird, which is mostly known for the noise it makes at night.
 
@@ -32,15 +37,31 @@ Android 8.1 or newer. Any phone; no wearable, no subscription, no companion devi
 
 ## Installing it
 
-There is no Play Store listing. Grab the APK and sideload it.
+There is no Play Store listing. Grab the APK and sideload it. **After the first install it updates
+itself** — see below.
 
-1. **Actions** tab → newest green run → **Artifacts** → download **Nightjar-apk** (a zip containing
-   `Nightjar.apk`, about 43 MB — most of that is the sound-classification model).
+Latest build: [**Releases**](https://github.com/Sovereignhq-aviv/nightjar/releases/latest).
+
+1. Download `Nightjar.apk` from the [latest release](https://github.com/Sovereignhq-aviv/nightjar/releases/latest)
+   — about 43 MB, most of which is the sound-classification model. (Unreleased builds are also
+   attached to every run under the **Actions** tab.)
 2. Get it onto the phone via Google Drive or a USB cable. **Not email** — Gmail blocks `.apk`
    attachments outright.
 3. Open it on the phone. Android refuses the first time with *"your phone isn't allowed to install
    unknown apps from this source"*: tap **Settings** in that dialog, enable **Allow from this
    source**, press Back, then **Install**. Once per app you open APKs with.
+
+### Updating
+
+Settings → **Updates**. It checks GitHub a few times a day while the app is open, and offers a
+one-tap download and install when there is something newer. Android shows its own confirmation
+before anything is installed — nothing here can replace the app silently, which is deliberate.
+
+The first update also needs a one-off Android permission ("allow installing unknown apps" for
+Nightjar). The app puts a button in front of you when that moment arrives.
+
+Every version is signed with the same key, so an update installs over the top and keeps all your
+recordings and settings.
 
 ### Before you trust it with a morning
 
@@ -162,6 +183,17 @@ MIT — see [LICENSE](LICENSE). Do what you like with it.
 
 Third-party components, all Apache 2.0 and all requiring attribution, are listed in
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+### Releasing a new version
+
+Push a tag and CI does the rest — builds, tests, publishes the release, and the in-app updater picks
+it up from there:
+
+```bash
+git tag v1.2.0 && git push origin v1.2.0
+```
+
+Bump `versionName` in `app/build.gradle.kts` to match the tag first; the updater compares the two.
 
 **Not affiliated with anyone.** Nightjar is independent, and is not connected to, endorsed by, or
 derived from the code of Sleep Cycle AB, Sleepwave, SnoreLab or any other sleep app. Nothing was

@@ -2,4 +2,6 @@
 <paths>
     <!-- Only the clips folder is ever shareable. Session JSON stays private. -->
     <files-path name="clips" path="clips/" />
+    <!-- Downloaded updates, so the system installer can read the APK we hand it. -->
+    <cache-path name="updates" path="updates/" />
 </paths>

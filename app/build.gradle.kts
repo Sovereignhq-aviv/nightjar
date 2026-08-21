@@ -15,18 +15,21 @@ android {
         // in order to appear over the lock screen.
         minSdk = 27
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        // Bumped on every release. The updater compares versionName against the release tag.
+        versionCode = 2
+        versionName = "1.1.0"
     }
 
     signingConfigs {
         getByName("debug") {
-            // A committed, non-secret debug key. Without a fixed key every build would be signed
-            // differently, and Android refuses to install a differently-signed APK over an existing
-            // one - the only way forward would be uninstalling, which deletes every recording.
-            val committed = rootProject.file("debug.keystore")
-            if (committed.exists()) {
-                storeFile = committed
+            // Supplied by CI from the DEBUG_KEYSTORE_B64 secret, and never committed. Every build
+            // has to use the same key: Android refuses to install a differently-signed APK over an
+            // existing one, and the only way forward would be uninstalling, which deletes every
+            // recording. A local build with no key falls back to Gradle's own and cannot upgrade an
+            // installed release.
+            val supplied = rootProject.file("debug.keystore")
+            if (supplied.exists()) {
+                storeFile = supplied
                 storePassword = "android"
                 keyAlias = "androiddebugkey"
                 keyPassword = "android"
@@ -59,6 +62,8 @@ android {
 
     buildFeatures {
         compose = true
+        // The updater reads VERSION_NAME from BuildConfig to compare against the release tag.
+        buildConfig = true
     }
 
     packaging {
@@ -73,6 +78,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
 
     implementation(platform("androidx.compose:compose-bom:2024.10.01"))
     implementation("androidx.compose.ui:ui")

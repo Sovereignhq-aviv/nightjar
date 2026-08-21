@@ -134,6 +134,9 @@ private fun NightjarApp() {
 
     LaunchedEffect(tracking) { if (!tracking) vm.refresh() }
 
+    // Silent unless there is actually something newer, and rate-limited to a few times a day.
+    LaunchedEffect(Unit) { vm.maybeAutoCheck() }
+
     // A ringing alarm outranks everything. This branch is why the notification shade is no longer
     // the only place with a stop button: Android 14 can refuse the full-screen wake-up activity
     // permission to appear, and when it does, opening the app has to be enough.
@@ -257,7 +260,8 @@ private fun NightjarApp() {
                     Tab.SOUNDS -> SoundsScreen(
                         vm = vm,
                         tracking = false,
-                        onStartNight = { startNight() }
+                        onStartNight = { startNight() },
+                        onOpenUpdate = { tab = Tab.SETTINGS }
                     )
 
                     Tab.SLEEP -> SleepScreen(vm = vm, onStartNight = { startNight() })

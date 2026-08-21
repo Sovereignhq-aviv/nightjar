@@ -46,6 +46,7 @@ import org.sovereignhq.nightjar.data.SleepSession
 import org.sovereignhq.nightjar.data.SoundClip
 import org.sovereignhq.nightjar.ui.components.EmptyState
 import org.sovereignhq.nightjar.ui.components.LoudnessBar
+import org.sovereignhq.nightjar.ui.components.UpdateBanner
 import org.sovereignhq.nightjar.ui.components.Waveform
 import org.sovereignhq.nightjar.ui.theme.DataColors
 
@@ -61,6 +62,7 @@ fun SoundsScreen(
     vm: SleepViewModel,
     tracking: Boolean,
     onStartNight: () -> Unit,
+    onOpenUpdate: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val session = vm.selectedSession
@@ -69,6 +71,10 @@ fun SoundsScreen(
     var pendingDelete by remember { mutableStateOf<SoundClip?>(null) }
 
     Column(modifier.fillMaxWidth()) {
+        Box(Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
+            UpdateBanner(state = vm.updateState, onOpen = onOpenUpdate)
+        }
+
         NightHeader(vm, session, tracking, onStartNight)
 
         if (session == null) {

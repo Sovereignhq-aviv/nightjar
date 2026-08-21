@@ -2,6 +2,11 @@ package org.sovereignhq.nightjar.ui
 
 import android.app.Application
 import android.content.Intent
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.launch
+import org.sovereignhq.nightjar.BuildConfig
+import org.sovereignhq.nightjar.update.UpdateChecker
+import java.io.File
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -18,6 +23,17 @@ import org.sovereignhq.nightjar.sleep.SleepClassifier
 
 /** How the recordings list is ordered. */
 enum class ClipSort { TIME, LOUDEST }
+
+/** Where the app has got to in checking for, fetching and handing over a new version. */
+sealed interface UpdateState {
+    data object Idle : UpdateState
+    data object Checking : UpdateState
+    data object UpToDate : UpdateState
+    data class Available(val release: UpdateChecker.Release) : UpdateState
+    data class Downloading(val progress: Float) : UpdateState
+    data class Ready(val file: File, val version: String) : UpdateState
+    data class Failed(val message: String) : UpdateState
+}
 
 class SleepViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -48,8 +64,73 @@ class SleepViewModel(app: Application) : AndroidViewModel(app) {
     var starredOnly by mutableStateOf(false)
         private set
 
+    var updateState by mutableStateOf<UpdateState>(UpdateState.Idle)
+        private set
+
+    val installedVersion: String get() = BuildConfig.VERSION_NAME
+
     init {
         refresh()
+    }
+
+    // ---- self update ----
+
+    /**
+     * Called when the app opens. Silent by design: it says nothing when there is no update and
+     * nothing when the network is unavailable, because neither is news.
+     */
+    fun maybeAutoCheck() {
+        if (!settings.autoUpdateCheck) return
+        val elapsed = System.currentTimeMillis() - settingsStore.lastUpdateCheckMs
+        if (elapsed < AUTO_CHECK_INTERVAL_MS) return
+        checkForUpdate(announceUpToDate = false)
+    }
+
+    fun checkForUpdate(announceUpToDate: Boolean = true) {
+        if (updateState is UpdateState.Checking || updateState is UpdateState.Downloading) return
+        updateState = UpdateState.Checking
+        viewModelScope.launch {
+            settingsStore.lastUpdateCheckMs = System.currentTimeMillis()
+            val release = UpdateChecker.findUpdate()
+            updateState = when {
+                release != null -> UpdateState.Available(release)
+                announceUpToDate -> UpdateState.UpToDate
+                else -> UpdateState.Idle
+            }
+        }
+    }
+
+    fun downloadUpdate() {
+        val available = updateState as? UpdateState.Available ?: return
+        updateState = UpdateState.Downloading(0f)
+        viewModelScope.launch {
+            val file = UpdateChecker.download(getApplication(), available.release) { progress ->
+                // Only overwrite while still downloading, so a cancel or failure is not undone by a
+                // late progress callback.
+                if (updateState is UpdateState.Downloading) {
+                    updateState = UpdateState.Downloading(progress)
+                }
+            }
+            updateState = if (file == null) {
+                UpdateState.Failed("The download did not finish. Check the connection and retry.")
+            } else {
+                UpdateState.Ready(file, available.release.version)
+            }
+        }
+    }
+
+    /** The system installer intent, or null if the file went missing between download and tap. */
+    fun installIntent(): Intent? {
+        val ready = updateState as? UpdateState.Ready ?: return null
+        if (!ready.file.exists()) {
+            updateState = UpdateState.Failed("The downloaded file is gone. Try downloading again.")
+            return null
+        }
+        return runCatching { UpdateChecker.installIntent(getApplication(), ready.file) }.getOrNull()
+    }
+
+    fun dismissUpdate() {
+        updateState = UpdateState.Idle
     }
 
     fun refresh() {
@@ -208,6 +289,11 @@ class SleepViewModel(app: Application) : AndroidViewModel(app) {
         store.pruneAudio(settings.clipRetentionDays)
         store.pruneSessions(settings.nightRetentionDays)
         refresh()
+    }
+
+    private companion object {
+        /** Four times a day is plenty for an app opened twice. */
+        const val AUTO_CHECK_INTERVAL_MS = 6L * 60L * 60L * 1000L
     }
 
     override fun onCleared() {

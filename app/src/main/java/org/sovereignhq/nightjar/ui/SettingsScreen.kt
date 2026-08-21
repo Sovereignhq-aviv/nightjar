@@ -43,6 +43,7 @@ import org.sovereignhq.nightjar.service.AlarmScheduler
 import org.sovereignhq.nightjar.service.Notifications
 import org.sovereignhq.nightjar.service.SleepService
 import org.sovereignhq.nightjar.ui.components.HairLine
+import org.sovereignhq.nightjar.ui.components.UpdateCard
 import org.sovereignhq.nightjar.ui.components.MicCheckCard
 import org.sovereignhq.nightjar.ui.components.LegendDot
 import org.sovereignhq.nightjar.ui.components.NightCard
@@ -103,6 +104,23 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
     ) {
         Spacer(Modifier.height(10.dp))
         Text("Settings", style = MaterialTheme.typography.headlineMedium)
+
+        SectionLabel("Updates")
+        NightCard {
+            UpdateCard(
+                state = vm.updateState,
+                installedVersion = vm.installedVersion,
+                autoCheckEnabled = settings.autoUpdateCheck,
+                onToggleAutoCheck = { on -> vm.updateSettings { copy(autoUpdateCheck = on) } },
+                onCheck = { vm.checkForUpdate() },
+                onDownload = { vm.downloadUpdate() },
+                onInstall = {
+                    val intent = vm.installIntent()
+                    if (intent != null) runCatching { context.startActivity(intent) }
+                },
+                onDismiss = { vm.dismissUpdate() }
+            )
+        }
 
         // ---------------------------------------------------------- recordings
         SectionLabel("Recording")

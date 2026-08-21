@@ -146,6 +146,19 @@ class Settings(context: Context) {
         get() = prefs.getInt("night_retention_days", 365)
         set(v) = prefs.edit().putInt("night_retention_days", v).apply()
 
+    /**
+     * Whether to look for new versions. Off means the app makes no network requests at all, which is
+     * the state it shipped in before self-updating existed.
+     */
+    var autoUpdateCheck: Boolean
+        get() = prefs.getBoolean("auto_update_check", true)
+        set(v) = prefs.edit().putBoolean("auto_update_check", v).apply()
+
+    /** Rate-limits the check to a few times a day rather than every time the app opens. */
+    var lastUpdateCheckMs: Long
+        get() = prefs.getLong("last_update_check", 0L)
+        set(v) = prefs.edit().putLong("last_update_check", v).apply()
+
     /** Session id currently being tracked, or empty. Survives the app being killed. */
     var activeSessionId: String
         get() = prefs.getString("active_session_id", "") ?: ""
@@ -186,6 +199,7 @@ class Settings(context: Context) {
         alarmSoundUri = alarmSoundUri,
         alarmSoundLabel = alarmSoundLabel,
         mutedLabels = mutedLabels,
+        autoUpdateCheck = autoUpdateCheck,
         clipRetentionDays = clipRetentionDays,
         nightRetentionDays = nightRetentionDays
     )
@@ -215,6 +229,7 @@ data class SettingsSnapshot(
     val alarmSoundUri: String,
     val alarmSoundLabel: String,
     val mutedLabels: Set<String>,
+    val autoUpdateCheck: Boolean,
     val clipRetentionDays: Int,
     val nightRetentionDays: Int
 ) {
@@ -235,6 +250,7 @@ data class SettingsSnapshot(
         settings.alarmSoundUri = alarmSoundUri
         settings.alarmSoundLabel = alarmSoundLabel
         settings.mutedLabels = mutedLabels
+        settings.autoUpdateCheck = autoUpdateCheck
         settings.clipRetentionDays = clipRetentionDays
         settings.nightRetentionDays = nightRetentionDays
     }

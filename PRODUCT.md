@@ -9,7 +9,9 @@ because the features worth having were behind a subscription.
 ## Who it's for
 
 One household, on one Android phone. Not a product with users — a tool with an owner. That shapes
-every trade-off: no accounts, no onboarding funnel, no analytics, no cloud. Storage decisions are
+every trade-off: no accounts, no onboarding funnel, no analytics, no cloud. The single exception is an
+optional update check against GitHub's public API, which exists because sideloaded apps otherwise rot
+on the phone; it is switchable off, and it is the only network use in the app. Storage decisions are
 made for one phone, and honesty about accuracy beats a confident-looking number.
 
 ## What people actually want from it
