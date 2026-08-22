@@ -118,6 +118,14 @@ data class SleepSession(
 ) {
     fun loudestClips(limit: Int): List<SoundClip> =
         clips.sortedByDescending { it.peakDb }.take(limit)
+
+    /**
+     * Whether night retention may drop this night wholesale. Starred audio vetoes it: starring is
+     * the one promise the app makes about a recording surviving, and dropping the night would take
+     * the clip with it. The graphs kept alive alongside cost a few hundred KB.
+     */
+    fun isDroppableBefore(cutoffMs: Long): Boolean =
+        startedAtMs < cutoffMs && clips.none { it.starred }
 }
 
 /** Everything derived from a session. Computed on read, never stored, so tuning changes apply retroactively. */

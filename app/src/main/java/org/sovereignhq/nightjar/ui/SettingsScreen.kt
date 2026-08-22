@@ -463,7 +463,7 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
                 steps = 0,
                 display = "${settings.nightRetentionDays} days",
                 subtitle = "Graphs and scores only - a few hundred KB a year. Longer history makes " +
-                    "Trends more useful.",
+                    "Trends more useful. Nights holding starred audio are kept regardless.",
                 onChange = { v -> vm.updateSettings { copy(nightRetentionDays = v.roundToInt()) } }
             )
         }

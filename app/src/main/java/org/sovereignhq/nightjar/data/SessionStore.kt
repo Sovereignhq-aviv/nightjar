@@ -12,7 +12,8 @@ import java.io.File
  *
  * Retention is two-tier and deliberately lopsided. Audio is what fills a phone, so it is deleted
  * within days unless starred. The graphs and scores are tiny and Trends is worthless without
- * history, so nights are kept for about a year.
+ * history, so nights are kept for about a year. Starring overrides both tiers: a starred clip
+ * lasts until it is deleted by hand, and the night around it is kept so it stays playable.
  */
 class SessionStore(context: Context) {
 
@@ -45,6 +46,7 @@ class SessionStore(context: Context) {
 
     fun clipFile(name: String): File = File(clipsDir, name)
 
+    /** The deliberate path, and the only one that takes starred audio. */
     fun delete(session: SleepSession) {
         session.clips.forEach { runCatching { clipFile(it.fileName).delete() } }
         runCatching { File(sessionsDir, "${session.id}.json").delete() }
@@ -102,11 +104,14 @@ class SessionStore(context: Context) {
         clipsDir.listFiles()?.forEach { f -> if (f.name !in referenced) f.delete() }
     }
 
-    /** Drops whole nights older than [days], audio included. [days] <= 0 keeps everything. */
+    /**
+     * Drops whole nights older than [days], audio included - except a night still holding starred
+     * audio, which is kept in full so the clip stays playable. [days] <= 0 keeps everything.
+     */
     fun pruneSessions(days: Int) {
         if (days <= 0) return
         val cutoff = System.currentTimeMillis() - days * DAY_MS
-        loadAll().filter { it.startedAtMs < cutoff }.forEach { delete(it) }
+        loadAll().filter { it.isDroppableBefore(cutoff) }.forEach { delete(it) }
     }
 
     fun clipBytesOnDisk(): Long = clipsDir.listFiles()?.sumOf { it.length() } ?: 0L
