@@ -367,9 +367,20 @@ private fun LastNight(vm: SleepViewModel, session: SleepSession) {
             onDismissRequest = { confirmingDelete = false },
             title = { Text("Delete this night?") },
             text = {
+                val saved = session.clips.count { it.starred }
                 Text(
-                    "The graph, the score and every recording from it go for good.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = if (saved > 0) {
+                        "The graph, the score and every recording from it go for good - including " +
+                            "$saved you saved. Nothing else can delete a saved recording, so this is " +
+                            "the only way it happens."
+                    } else {
+                        "The graph, the score and every recording from it go for good."
+                    },
+                    color = if (saved > 0) {
+                        MaterialTheme.colorScheme.tertiary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
                 )
             },
             confirmButton = {

@@ -186,8 +186,9 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
                 range = 1f..60f,
                 steps = 0,
                 display = "${settings.clipRetentionDays} days",
-                subtitle = "Anything you star is kept forever. Everything else is deleted after " +
-                    "this. Audio on this phone right now: $storageMb MB.",
+                subtitle = "Applies to unsaved recordings only. Starred ones are never deleted by " +
+                    "anything automatic - not this, and not the yearly night cleanup either. Audio " +
+                    "on this phone right now: $storageMb MB.",
                 onChange = { v -> vm.updateSettings { copy(clipRetentionDays = v.roundToInt()) } }
             )
 

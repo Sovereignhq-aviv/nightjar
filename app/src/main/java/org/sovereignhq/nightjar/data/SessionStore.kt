@@ -102,12 +102,36 @@ class SessionStore(context: Context) {
         clipsDir.listFiles()?.forEach { f -> if (f.name !in referenced) f.delete() }
     }
 
-    /** Drops whole nights older than [days], audio included. [days] <= 0 keeps everything. */
+    /**
+     * Drops whole nights older than [days]. [days] <= 0 keeps everything.
+     *
+     * A night holding a starred clip is never dropped, however old it is. Without that exception the
+     * promise made everywhere else in the app - that starring a recording keeps it forever - quietly
+     * expired after a year, because deleting a night deletes its audio with it. Starring something is
+     * the user saying "keep this", and an automatic sweep has no business overruling that.
+     *
+     * Unstarred audio inside a kept night still goes; only the recordings that were explicitly saved,
+     * and the night they belong to, survive.
+     */
     fun pruneSessions(days: Int) {
         if (days <= 0) return
         val cutoff = System.currentTimeMillis() - days * DAY_MS
-        loadAll().filter { it.startedAtMs < cutoff }.forEach { delete(it) }
+
+        loadAll().filter { it.startedAtMs < cutoff }.forEach { session ->
+            val saved = session.clips.filter { it.starred }
+            if (saved.isEmpty()) {
+                delete(session)
+                return@forEach
+            }
+            // Keep the night, but shed everything in it that was not saved.
+            val disposable = session.clips - saved.toSet()
+            disposable.forEach { runCatching { clipFile(it.fileName).delete() } }
+            if (disposable.isNotEmpty()) save(session.copy(clips = saved))
+        }
     }
+
+    /** How many recordings are starred across every night. Shown in Settings. */
+    fun savedClipCount(): Int = loadAll().sumOf { night -> night.clips.count { it.starred } }
 
     fun clipBytesOnDisk(): Long = clipsDir.listFiles()?.sumOf { it.length() } ?: 0L
 
