@@ -23,8 +23,12 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # The action's default package list still includes the long-retired "tools" package, which
+      # newer runner images no longer carry, and sdkmanager fails the whole job over it.
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools"
 
       - name: Install the platform this app targets
         run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
