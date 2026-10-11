@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -334,7 +335,9 @@ private fun LastNight(vm: SleepViewModel, session: SleepSession) {
                             else MaterialTheme.colorScheme.surfaceVariant
                         )
                         .clickable { vm.toggleTag(session, tag) }
-                        .padding(horizontal = 14.dp, vertical = 12.dp)
+                        .heightIn(min = 48.dp)
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = tag,

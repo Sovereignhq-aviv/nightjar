@@ -16,8 +16,8 @@ android {
         minSdk = 27
         targetSdk = 35
         // Bumped on every release. The updater compares versionName against the release tag.
-        versionCode = 5
-        versionName = "1.3.1"
+        versionCode = 6
+        versionName = "1.3.2"
     }
 
     signingConfigs {

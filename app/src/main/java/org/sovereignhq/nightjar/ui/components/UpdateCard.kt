@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -87,7 +88,7 @@ fun UpdateCard(
             if (state is UpdateState.Available || state is UpdateState.Failed) {
                 Box(
                     Modifier
-                        .size(40.dp)
+                        .size(48.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .clickable(onClick = onDismiss),
                     contentAlignment = Alignment.Center
@@ -234,6 +235,7 @@ fun UpdateBanner(
         modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
+            .heightIn(min = 48.dp)
             .background(MaterialTheme.colorScheme.primaryContainer)
             .clickable(onClick = onOpen)
             .padding(horizontal = 14.dp, vertical = 12.dp),
