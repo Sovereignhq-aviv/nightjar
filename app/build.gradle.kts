@@ -16,8 +16,8 @@ android {
         minSdk = 27
         targetSdk = 35
         // Bumped on every release. The updater compares versionName against the release tag.
-        versionCode = 3
-        versionName = "1.2.0"
+        versionCode = 4
+        versionName = "1.3.0"
     }
 
     signingConfigs {
@@ -89,6 +89,9 @@ dependencies {
 
     // YAMNet on-device: Google's AudioSet-trained sound classifier, ~4MB, runs in real time.
     implementation("com.google.mediapipe:tasks-audio:0.10.14")
+
+    // Reads the wake code. Plain open-source Java, on the phone, no Play services and no telemetry.
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")

@@ -144,6 +144,7 @@ private fun NightjarApp() {
         AlarmSurface(
             puzzleDigits = vm.settings.puzzleDigits,
             puzzleCount = vm.settings.puzzleCount,
+            wakeCode = vm.settings.wakeCode,
             quietened = alarmQuiet,
             onQuieten = { SleepService.send(context, SleepService.ACTION_QUIET) },
             onSnooze = { SleepService.send(context, SleepService.ACTION_SNOOZE) },

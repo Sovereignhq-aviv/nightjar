@@ -374,13 +374,19 @@ class SleepService : Service(), NightRecorder.Listener, EventDetector.Listener {
      *
      * The restore is the important half. Without it "quiet" would be an undocumented way to switch
      * the alarm off by walking away, which is precisely what an alarm must not offer.
+     *
+     * Asking again while already quiet restarts the grace period. The wake-up screen does that on
+     * every keypad press, so the room stays silent for as long as you are actually solving, and the
+     * sound only comes back once you stop. Only a deliberate press re-arms it - nothing on a timer -
+     * so leaving the screen open and going back to sleep still ends with the alarm ringing.
      */
     private fun quieten() {
-        if (!player.isPlaying || player.isQuiet) return
-        player.quieten()
-        SleepState.setAlarmQuiet(true)
+        if (!player.isPlaying) return
         main.removeCallbacks(restoreSound)
         main.postDelayed(restoreSound, QUIET_GRACE_MS)
+        if (player.isQuiet) return
+        player.quieten()
+        SleepState.setAlarmQuiet(true)
         updateNotification("Alarm silenced - still waiting for you", force = true)
     }
 

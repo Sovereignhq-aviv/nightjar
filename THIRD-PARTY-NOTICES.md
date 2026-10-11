@@ -26,6 +26,8 @@ Creative Commons Attribution 4.0.
 | Kotlin standard library and compiler | JetBrains s.r.o. | Apache 2.0 |
 | kotlinx.coroutines | JetBrains s.r.o. | Apache 2.0 |
 | kotlinx.serialization | JetBrains s.r.o. | Apache 2.0 |
+| ZXing (barcode decoding) | ZXing authors | Apache 2.0 |
+| ZXing Android Embedded | JourneyApps | Apache 2.0 |
 | JUnit 4 (tests only, not shipped) | JUnit contributors | Eclipse Public License 1.0 |
 
 ## Written from scratch, with no third-party code

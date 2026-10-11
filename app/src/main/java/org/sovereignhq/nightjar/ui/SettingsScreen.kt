@@ -1,5 +1,6 @@
 package org.sovereignhq.nightjar.ui
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.media.RingtoneManager
@@ -29,7 +30,10 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,10 +43,13 @@ import org.sovereignhq.nightjar.audio.AudioSetLabels
 import org.sovereignhq.nightjar.data.EventKind
 import org.sovereignhq.nightjar.data.Sensitivity
 import org.sovereignhq.nightjar.alarm.PuzzleGenerator
+import org.sovereignhq.nightjar.alarm.WakeCode
 import org.sovereignhq.nightjar.service.AlarmScheduler
 import org.sovereignhq.nightjar.service.Notifications
 import org.sovereignhq.nightjar.service.SleepService
+import org.sovereignhq.nightjar.ui.components.CodeScanner
 import org.sovereignhq.nightjar.ui.components.HairLine
+import org.sovereignhq.nightjar.ui.components.hasCameraPermission
 import org.sovereignhq.nightjar.ui.components.UpdateCard
 import org.sovereignhq.nightjar.ui.components.MicCheckCard
 import org.sovereignhq.nightjar.ui.components.LegendDot
@@ -417,6 +424,15 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
             }
 
             Spacer(Modifier.height(18.dp))
+            HairLine()
+            Spacer(Modifier.height(16.dp))
+
+            WakeCodeSetting(
+                wakeCode = settings.wakeCode,
+                onChange = { code -> vm.updateSettings { copy(wakeCode = code) } }
+            )
+
+            Spacer(Modifier.height(18.dp))
             OutlinedButton(
                 onClick = { SleepService.send(context, SleepService.ACTION_FIRE_ALARM) },
                 modifier = Modifier.fillMaxWidth().height(48.dp)
@@ -700,3 +716,105 @@ private fun displayNameOf(context: Context, uri: Uri): String = runCatching {
         .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
         ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
 }.getOrNull() ?: "Chosen audio file"
+
+/**
+ * Registers the code that has to be scanned to switch the alarm off.
+ *
+ * Registering is the moment to ask for the camera, while the app is open and in your hand. Asking at
+ * the alarm itself would put a permission dialog in front of someone half asleep, over a lock screen
+ * that may not even show it.
+ */
+@Composable
+private fun WakeCodeSetting(wakeCode: String, onChange: (String) -> Unit) {
+    val context = LocalContext.current
+    var scanning by remember { mutableStateOf(false) }
+    var refused by remember { mutableStateOf(false) }
+
+    val cameraPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        refused = !granted
+        scanning = granted
+    }
+
+    SectionLabel("Scan a code to switch it off")
+    Spacer(Modifier.height(6.dp))
+    Text(
+        "Stick any QR code or barcode somewhere away from the bed - the bathroom works - and the " +
+            "alarm only switches off once you have walked there and scanned it. The room goes " +
+            "silent while you do. A shampoo bottle's barcode is fine.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    Spacer(Modifier.height(10.dp))
+
+    when {
+        scanning -> {
+            CodeScanner(
+                onCode = { code ->
+                    if (scanning && code.isNotBlank()) {
+                        scanning = false
+                        onChange(code.trim())
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(260.dp)
+                    .clip(RoundedCornerShape(14.dp))
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = { scanning = false },
+                modifier = Modifier.fillMaxWidth().height(48.dp)
+            ) { Text("Cancel") }
+        }
+
+        wakeCode.isNotBlank() -> {
+            Text(
+                "Registered: ${WakeCode.preview(wakeCode)}",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        if (hasCameraPermission(context)) scanning = true
+                        else cameraPermission.launch(Manifest.permission.CAMERA)
+                    },
+                    modifier = Modifier.weight(1f).height(48.dp)
+                ) { Text("Scan a new one") }
+                OutlinedButton(
+                    onClick = { onChange("") },
+                    modifier = Modifier.weight(1f).height(48.dp)
+                ) { Text("Turn off") }
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "Travelling? Turn it off before you go. If you forget, the alarm offers five " +
+                    "three-digit sums instead.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        else -> OutlinedButton(
+            onClick = {
+                if (hasCameraPermission(context)) scanning = true
+                else cameraPermission.launch(Manifest.permission.CAMERA)
+            },
+            modifier = Modifier.fillMaxWidth().height(48.dp)
+        ) { Text("Register a code") }
+    }
+
+    if (refused) {
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Without the camera Nightjar cannot read a code. Allow it in Android's settings for " +
+                "Nightjar, then try again.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error
+        )
+    }
+}
+
