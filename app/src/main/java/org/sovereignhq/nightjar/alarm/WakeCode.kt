@@ -15,7 +15,7 @@ object WakeCode {
 
     /** A short, readable stand-in for the registered code, for the Settings row. */
     fun preview(code: String): String {
-        val clean = code.trim().replace(Regex("\s+"), " ")
+        val clean = code.trim().replace(Regex("\\s+"), " ")
         return if (clean.length <= 24) clean else clean.take(21) + "..."
     }
 }
