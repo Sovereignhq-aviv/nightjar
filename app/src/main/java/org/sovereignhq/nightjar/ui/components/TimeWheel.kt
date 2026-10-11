@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -28,7 +29,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -44,6 +47,10 @@ import kotlin.math.roundToInt
  *
  * Minute resolution is one minute rather than five. Five would be fewer rows to scroll past, and it
  * would miss the point: the complaint was not being able to land on the number you actually wanted.
+ *
+ * Always laid out left to right. A phone set to Hebrew or Arabic mirrors every Row, which turned this
+ * into AM/PM, minutes, hours - but a clock reads hours-then-minutes left to right in those languages
+ * too, so mirroring it is simply wrong.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -63,6 +70,7 @@ fun TimeWheel(
     val hourIndex = hour % 12
     val halfIndex = if (hour >= 12) 1 else 0
 
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(contentAlignment = Alignment.Center) {
 
@@ -116,6 +124,7 @@ fun TimeWheel(
                 )
             }
         }
+    }
     }
 }
 
