@@ -105,6 +105,15 @@ class Settings(context: Context) {
         get() = prefs.getInt("puzzle_count", 1)
         set(v) = prefs.edit().putInt("puzzle_count", v.coerceIn(1, 5)).apply()
 
+    /**
+     * The contents of a QR code or barcode that has to be scanned to switch the alarm off. Empty
+     * means no scan. The code lives somewhere out of reach of the bed - the bathroom, the kettle -
+     * so switching the alarm off means standing up and walking there first.
+     */
+    var wakeCode: String
+        get() = prefs.getString("wake_code", "") ?: ""
+        set(v) = prefs.edit().putString("wake_code", v).apply()
+
     /** Empty means "use the system default alarm sound". */
     var alarmSoundUri: String
         get() = prefs.getString("alarm_sound_uri", "") ?: ""
@@ -196,6 +205,7 @@ class Settings(context: Context) {
         rampSeconds = rampSeconds,
         puzzleDigits = puzzleDigits,
         puzzleCount = puzzleCount,
+        wakeCode = wakeCode,
         alarmSoundUri = alarmSoundUri,
         alarmSoundLabel = alarmSoundLabel,
         mutedLabels = mutedLabels,
@@ -226,6 +236,7 @@ data class SettingsSnapshot(
     val rampSeconds: Int,
     val puzzleDigits: Int,
     val puzzleCount: Int,
+    val wakeCode: String,
     val alarmSoundUri: String,
     val alarmSoundLabel: String,
     val mutedLabels: Set<String>,
@@ -247,6 +258,7 @@ data class SettingsSnapshot(
         settings.rampSeconds = rampSeconds
         settings.puzzleDigits = puzzleDigits
         settings.puzzleCount = puzzleCount
+        settings.wakeCode = wakeCode
         settings.alarmSoundUri = alarmSoundUri
         settings.alarmSoundLabel = alarmSoundLabel
         settings.mutedLabels = mutedLabels

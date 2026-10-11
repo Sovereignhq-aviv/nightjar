@@ -16,6 +16,9 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- Reading the wake code, only if one is registered -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
     <!--
       The only network use in the app: an unauthenticated GET to GitHub's public releases API to see
       whether a newer version exists. No identifier, no usage data, nothing about the recordings.
@@ -26,6 +29,7 @@
 
     <uses-feature android:name="android.hardware.microphone" android:required="true" />
     <uses-feature android:name="android.hardware.sensor.accelerometer" android:required="false" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
         android:name=".NightjarApplication"

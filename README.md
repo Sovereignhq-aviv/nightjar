@@ -29,7 +29,7 @@ footnote. So in this app it is the first screen.
 | **It names the noise** | Snoring, talking, rumbles, thumps — and more specifically than that. When the model says "Air conditioning", you learn why half your list is rubbish. Tap any label to correct it. |
 | **Highlights** | The loudest dozen moments of the night, back to back. |
 | **Smart alarm window** | Within your window (15/30/45 min) it rings while you are already stirring. The bar it has to clear falls as the window runs out, so it nearly always finds a good moment — and it always rings by the deadline. |
-| **Maths to switch it off** | Optional. One to three sums, one to three digits. There is also a button that silences the alarm instantly *without* dismissing it, for getting up without waking anyone else. |
+| **Get out of bed to switch it off** | Optional. Register any QR code or barcode - stick it in the bathroom - and the alarm only switches off once you have walked there and scanned it. Add one to three sums on top if you like. The moment you start, the room goes silent, and either volume button silences it again without snoozing, so nobody else in the bed has to listen while you do it. The sound comes back if you stop. |
 | **Sleep graph, score, REM** | Awake / light / deep / REM per minute, with a quality score. |
 | **Trends** | Hours, quality, bedtime consistency, recordings per night, quality by weekday, and a week-on-week snoring alert. |
 

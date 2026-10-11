@@ -49,6 +49,7 @@ class AlarmActivity : ComponentActivity() {
         val settings = Settings(this)
         val puzzleDigits = settings.puzzleDigits
         val puzzleCount = settings.puzzleCount
+        val wakeCode = settings.wakeCode
 
         setContent {
             NightjarTheme {
@@ -67,6 +68,7 @@ class AlarmActivity : ComponentActivity() {
                 AlarmSurface(
                     puzzleDigits = puzzleDigits,
                     puzzleCount = puzzleCount,
+                    wakeCode = wakeCode,
                     quietened = quiet,
                     onQuieten = { SleepService.send(this, SleepService.ACTION_QUIET) },
                     onSnooze = {
@@ -83,13 +85,16 @@ class AlarmActivity : ComponentActivity() {
     }
 
     /**
-     * Either volume key snoozes, which stays safe even with a puzzle set: a snooze brings the alarm
-     * back, so it is not a way around the puzzle. Only solving the puzzle dismisses anything.
+     * Either volume key quietens the alarm, exactly like the on-screen "Quiet it" button.
+     *
+     * It used to snooze, which threw you off the sums or the scan halfway through: the instinctive
+     * grab for a volume button means "make it stop for a moment", not "start again in nine minutes".
+     * Quietening keeps the alarm armed and keeps whatever you were solving on screen, and the sound
+     * comes back on its own if you then stop. Snoozing is still one tap away on the screen.
      */
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
-            SleepService.send(this, SleepService.ACTION_SNOOZE)
-            finish()
+            SleepService.send(this, SleepService.ACTION_QUIET)
             return true
         }
         return super.onKeyDown(keyCode, event)

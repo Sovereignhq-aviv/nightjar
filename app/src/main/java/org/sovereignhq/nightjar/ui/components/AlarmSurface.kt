@@ -39,12 +39,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import org.sovereignhq.nightjar.alarm.MathPuzzle
 import org.sovereignhq.nightjar.alarm.PuzzleGenerator
+import org.sovereignhq.nightjar.alarm.WakeCode
 import org.sovereignhq.nightjar.ui.formatClock
 
 /**
@@ -57,19 +59,24 @@ import org.sovereignhq.nightjar.ui.formatClock
  *
  * "Quiet it" exists because you may not be the only person in the bed. It drops the sound
  * immediately, before any puzzle is solved, and the sound returns on its own if you then do nothing -
- * so silencing the room is never the same thing as switching the alarm off.
+ * so silencing the room is never the same thing as switching the alarm off. Starting to switch the
+ * alarm off presses it for you: nobody else in the room should have to listen while you do sums.
+ *
+ * Switching off runs in a fixed order: scan the wake code if one is registered, then the sums if any
+ * are set. The scan comes first because it is the step that gets you out of bed.
  */
 @Composable
 fun AlarmSurface(
     puzzleDigits: Int,
     puzzleCount: Int,
+    wakeCode: String,
     quietened: Boolean,
     onQuieten: () -> Unit,
     onSnooze: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var solving by remember { mutableStateOf(false) }
+    var step by remember { mutableStateOf(OffStep.HOME) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     LaunchedEffect(Unit) {
@@ -79,6 +86,9 @@ fun AlarmSurface(
         }
     }
 
+    val needsScan = wakeCode.isNotBlank()
+    val afterScan = { if (puzzleDigits > 0) step = OffStep.SUMS else onDismiss() }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -87,69 +97,189 @@ fun AlarmSurface(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        if (solving) {
-            PuzzleGate(
+        when (step) {
+            OffStep.SCAN -> ScanGate(
+                wakeCode = wakeCode,
+                quietened = quietened,
+                onQuieten = onQuieten,
+                onScanned = afterScan,
+                onCannotScan = { step = OffStep.FALLBACK },
+                onGiveUp = { step = OffStep.HOME }
+            )
+
+            OffStep.SUMS -> PuzzleGate(
                 digits = puzzleDigits,
                 count = puzzleCount,
+                onKeyPress = onQuieten,
                 onSolved = onDismiss,
-                onGiveUp = { solving = false }
+                onGiveUp = { step = OffStep.HOME }
+            )
+
+            // The way out when the code cannot be scanned - a hotel room, a broken camera. It has to
+            // cost more than walking to the bathroom would, or it becomes the way everyone switches
+            // the alarm off.
+            OffStep.FALLBACK -> PuzzleGate(
+                digits = 3,
+                count = PuzzleGenerator.MAX_PUZZLES,
+                onKeyPress = onQuieten,
+                onSolved = onDismiss,
+                onGiveUp = { step = OffStep.SCAN }
+            )
+
+            OffStep.HOME -> {
+                Text(
+                    "Good morning",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(formatClock(now), style = MaterialTheme.typography.displayLarge)
+
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = describeSwitchOff(needsScan, puzzleDigits, puzzleCount),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(Modifier.height(40.dp))
+
+                Button(
+                    onClick = {
+                        when {
+                            needsScan -> { onQuieten(); step = OffStep.SCAN }
+                            puzzleDigits > 0 -> { onQuieten(); step = OffStep.SUMS }
+                            else -> onDismiss()
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(66.dp),
+                    shape = RoundedCornerShape(18.dp)
+                ) {
+                    Text(
+                        text = if (needsScan || puzzleDigits > 0) "Wake me up" else "I'm up",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                OutlinedButton(
+                    onClick = onSnooze,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = RoundedCornerShape(18.dp)
+                ) {
+                    Text(
+                        "Snooze",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Spacer(Modifier.height(24.dp))
+                QuietButton(quietened = quietened, onQuieten = onQuieten)
+            }
+        }
+    }
+}
+
+private enum class OffStep { HOME, SCAN, SUMS, FALLBACK }
+
+private fun describeSwitchOff(needsScan: Boolean, digits: Int, count: Int): String {
+    val sums = if (digits > 0) PuzzleGenerator.describe(digits, count).lowercase() else null
+    val switchOff = when {
+        needsScan && sums != null -> "Switching it off needs your wake code scanned, then $sums."
+        needsScan -> "Switching it off needs your wake code scanned."
+        sums != null -> "Switching it off needs $sums."
+        else -> null
+    }
+    val keys = "Either volume button silences it for a while."
+    return if (switchOff == null) keys else "$switchOff $keys"
+}
+
+/**
+ * Point the camera at the registered code. Anything else in view is ignored, so a cereal box by the
+ * bed does not count.
+ */
+@Composable
+private fun ScanGate(
+    wakeCode: String,
+    quietened: Boolean,
+    onQuieten: () -> Unit,
+    onScanned: () -> Unit,
+    onCannotScan: () -> Unit,
+    onGiveUp: () -> Unit
+) {
+    val context = LocalContext.current
+    val cameraAllowed = remember { hasCameraPermission(context) }
+    var wrongCode by remember { mutableStateOf(false) }
+    var done by remember { mutableStateOf(false) }
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            "Go and scan your wake code",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(14.dp))
+
+        if (cameraAllowed) {
+            CodeScanner(
+                onCode = { scanned ->
+                    when {
+                        done -> Unit
+                        WakeCode.matches(scanned, wakeCode) -> { done = true; onScanned() }
+                        else -> wrongCode = true
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(300.dp)
+                    .clip(RoundedCornerShape(18.dp))
             )
         } else {
             Text(
-                "Good morning",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(formatClock(now), style = MaterialTheme.typography.displayLarge)
-
-            Spacer(Modifier.height(10.dp))
-            Text(
-                text = if (puzzleDigits > 0) {
-                    "Switching it off needs ${PuzzleGenerator.describe(puzzleDigits, puzzleCount).lowercase()}."
-                } else {
-                    "Press either volume button to snooze."
-                },
+                "Nightjar is not allowed to use the camera any more, so it cannot read the code. " +
+                    "Use the sums instead, and allow the camera again in Settings later.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = MaterialTheme.colorScheme.error,
                 textAlign = TextAlign.Center
             )
+        }
 
-            Spacer(Modifier.height(40.dp))
+        Text(
+            text = if (wrongCode) "That is a different code." else " ",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error
+        )
 
-            Button(
-                onClick = { if (puzzleDigits > 0) solving = true else onDismiss() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(66.dp),
-                shape = RoundedCornerShape(18.dp)
-            ) {
-                Text(
-                    text = if (puzzleDigits > 0) "Wake me up" else "I'm up",
-                    style = MaterialTheme.typography.titleLarge
-                )
-            }
+        Spacer(Modifier.height(10.dp))
+        QuietButton(quietened = quietened, onQuieten = onQuieten)
+        Spacer(Modifier.height(10.dp))
 
-            Spacer(Modifier.height(10.dp))
-
-            OutlinedButton(
-                onClick = onSnooze,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(18.dp)
-            ) {
-                Text(
-                    "Snooze",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Spacer(Modifier.height(24.dp))
-            QuietButton(quietened = quietened, onQuieten = onQuieten)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextAction("Back", onGiveUp)
+            TextAction("Can't scan it?", onCannotScan)
         }
     }
+}
+
+@Composable
+private fun TextAction(label: String, onClick: () -> Unit) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 12.dp)
+    )
 }
 
 /** Silences the room without ending the alarm. */
@@ -201,6 +331,7 @@ private fun QuietButton(quietened: Boolean, onQuieten: () -> Unit) {
 private fun PuzzleGate(
     digits: Int,
     count: Int,
+    onKeyPress: () -> Unit,
     onSolved: () -> Unit,
     onGiveUp: () -> Unit
 ) {
@@ -259,6 +390,7 @@ private fun PuzzleGate(
         Spacer(Modifier.height(14.dp))
 
         Keypad(
+            onAnyKey = onKeyPress,
             onDigit = { d ->
                 if (entry.length < 6) {
                     entry += d
@@ -285,15 +417,7 @@ private fun PuzzleGate(
 
         Spacer(Modifier.height(12.dp))
 
-        Text(
-            text = "Back",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .clickable(onClick = onGiveUp)
-                .padding(horizontal = 20.dp, vertical = 12.dp)
-        )
+        TextAction("Back", onGiveUp)
     }
 }
 
@@ -304,6 +428,7 @@ private fun PuzzleGate(
  */
 @Composable
 private fun Keypad(
+    onAnyKey: () -> Unit,
     onDigit: (String) -> Unit,
     onBackspace: () -> Unit,
     onSubmit: () -> Unit
@@ -339,6 +464,7 @@ private fun Keypad(
                                 }
                             )
                             .clickable {
+                                onAnyKey()
                                 when {
                                     isOk -> onSubmit()
                                     isBack -> onBackspace()
