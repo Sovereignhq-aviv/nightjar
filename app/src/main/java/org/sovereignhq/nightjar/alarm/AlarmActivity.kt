@@ -36,6 +36,9 @@ class AlarmActivity : ComponentActivity() {
         setShowWhenLocked(true)
         setTurnScreenOn(true)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Bright enough to read a sum, dim enough not to light up the room for whoever is still
+        // asleep. The system brightness is left alone; this only applies while the alarm is up.
+        window.attributes = window.attributes.apply { screenBrightness = ALARM_BRIGHTNESS }
 
         if (!SleepState.alarmRinging.value) {
             SleepService.send(this, SleepService.ACTION_FIRE_ALARM)
@@ -54,7 +57,7 @@ class AlarmActivity : ComponentActivity() {
         setContent {
             NightjarTheme {
                 val ringing by SleepState.alarmRinging.collectAsState()
-                val quiet by SleepState.alarmQuiet.collectAsState()
+                val quietUntil by SleepState.alarmQuietUntilMs.collectAsState()
 
                 LaunchedEffect(ringing) {
                     // The service is the source of truth: once it stops, this screen has no reason
@@ -69,7 +72,7 @@ class AlarmActivity : ComponentActivity() {
                     puzzleDigits = puzzleDigits,
                     puzzleCount = puzzleCount,
                     wakeCode = wakeCode,
-                    quietened = quiet,
+                    quietUntilMs = quietUntil,
                     onQuieten = { SleepService.send(this, SleepService.ACTION_QUIET) },
                     onSnooze = {
                         SleepService.send(this, SleepService.ACTION_SNOOZE)
@@ -103,5 +106,7 @@ class AlarmActivity : ComponentActivity() {
     companion object {
         /** Set by the alarm backstop, meaning "the service was gone, you are the entry point". */
         const val ACTION_RESCUE = "org.sovereignhq.nightjar.RESCUE"
+
+        private const val ALARM_BRIGHTNESS = 0.25f
     }
 }

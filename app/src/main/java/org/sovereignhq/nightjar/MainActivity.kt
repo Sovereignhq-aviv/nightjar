@@ -102,7 +102,7 @@ private fun NightjarApp() {
 
     val tracking by SleepState.tracking.collectAsState()
     val alarmRinging by SleepState.alarmRinging.collectAsState()
-    val alarmQuiet by SleepState.alarmQuiet.collectAsState()
+    val alarmQuietUntil by SleepState.alarmQuietUntilMs.collectAsState()
     val finishedSessionId by SleepState.finishedSessionId.collectAsState()
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -145,7 +145,7 @@ private fun NightjarApp() {
             puzzleDigits = vm.settings.puzzleDigits,
             puzzleCount = vm.settings.puzzleCount,
             wakeCode = vm.settings.wakeCode,
-            quietened = alarmQuiet,
+            quietUntilMs = alarmQuietUntil,
             onQuieten = { SleepService.send(context, SleepService.ACTION_QUIET) },
             onSnooze = { SleepService.send(context, SleepService.ACTION_SNOOZE) },
             onDismiss = { SleepService.send(context, SleepService.ACTION_DISMISS) }

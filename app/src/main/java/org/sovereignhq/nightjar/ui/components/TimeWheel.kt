@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -29,15 +28,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * The alarm time as three scrolling wheels: hour, minute, AM/PM.
+ * The alarm time as two scrolling wheels: hour and minute, on a 24-hour clock.
  *
  * This replaced a circular dial. The dial photographed better and was worse in the hand: a ring maps
  * twelve hours onto 360 degrees, so a thumb covers several minutes at once and landing on an exact
@@ -45,12 +43,12 @@ import kotlin.math.roundToInt
  * instead of a careful arc - which is what a control used in the dark, one-handed, half asleep needs
  * to be.
  *
+ * Twenty-four hours rather than AM/PM, matching every other time in the app. A third wheel for the
+ * half of the day was one more thing to get wrong at midnight, and an alarm set for 7 PM by accident
+ * is the most expensive mistake this screen can make.
+ *
  * Minute resolution is one minute rather than five. Five would be fewer rows to scroll past, and it
  * would miss the point: the complaint was not being able to land on the number you actually wanted.
- *
- * Always laid out left to right. A phone set to Hebrew or Arabic mirrors every Row, which turned this
- * into AM/PM, minutes, hours - but a clock reads hours-then-minutes left to right in those languages
- * too, so mirroring it is simply wrong.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -62,15 +60,9 @@ fun TimeWheel(
     modifier: Modifier = Modifier,
     rowHeight: Int = 54
 ) {
-    // Midnight and noon read as 12 on a twelve-hour clock, so the wheel holds 12, 1, 2 ... 11.
-    val hourLabels = remember { (0 until 12).map { if (it == 0) "12" else it.toString() } }
-    val minuteLabels = remember { (0 until 60).map { "%02d".format(it) } }
-    val halfLabels = remember { listOf("AM", "PM") }
+    val hourLabels = remember { (0 until 24).map { String.format(Locale.ROOT, "%02d", it) } }
+    val minuteLabels = remember { (0 until 60).map { String.format(Locale.ROOT, "%02d", it) } }
 
-    val hourIndex = hour % 12
-    val halfIndex = if (hour >= 12) 1 else 0
-
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(contentAlignment = Alignment.Center) {
 
@@ -90,41 +82,30 @@ fun TimeWheel(
             ) {
                 Wheel(
                     labels = hourLabels,
-                    selectedIndex = hourIndex,
+                    selectedIndex = hour.coerceIn(0, 23),
                     enabled = enabled,
                     rowHeight = rowHeight,
-                    width = 76,
+                    width = 84,
                     align = TextAlign.End,
-                    onSelected = { picked -> onChange(halfIndex * 12 + picked, minute) }
+                    onSelected = { picked -> onChange(picked, minute) }
                 )
                 Text(
                     text = ":",
                     style = MaterialTheme.typography.displayMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 2.dp)
+                    modifier = Modifier.padding(horizontal = 4.dp)
                 )
                 Wheel(
                     labels = minuteLabels,
                     selectedIndex = minute.coerceIn(0, 59),
                     enabled = enabled,
                     rowHeight = rowHeight,
-                    width = 76,
+                    width = 84,
                     align = TextAlign.Start,
                     onSelected = { picked -> onChange(hour, picked) }
                 )
-                Wheel(
-                    labels = halfLabels,
-                    selectedIndex = halfIndex,
-                    enabled = enabled,
-                    rowHeight = rowHeight,
-                    width = 64,
-                    align = TextAlign.Center,
-                    small = true,
-                    onSelected = { picked -> onChange(picked * 12 + hour % 12, minute) }
-                )
             }
         }
-    }
     }
 }
 
@@ -137,8 +118,7 @@ private fun Wheel(
     rowHeight: Int,
     width: Int,
     align: TextAlign,
-    onSelected: (Int) -> Unit,
-    small: Boolean = false
+    onSelected: (Int) -> Unit
 ) {
     val state = rememberLazyListState()
     val rowPx = with(LocalDensity.current) { rowHeight.dp.toPx() }
@@ -185,11 +165,7 @@ private fun Wheel(
                 Text(
                     text = label,
                     textAlign = align,
-                    style = if (small) {
-                        MaterialTheme.typography.headlineSmall
-                    } else {
-                        MaterialTheme.typography.displayMedium
-                    },
+                    style = MaterialTheme.typography.displayMedium,
                     color = if (enabled) {
                         MaterialTheme.colorScheme.onSurface
                     } else {

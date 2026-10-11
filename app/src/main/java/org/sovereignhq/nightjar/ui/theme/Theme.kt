@@ -4,9 +4,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
 import org.sovereignhq.nightjar.data.EventKind
 
@@ -116,5 +119,12 @@ private val typography = Typography(
 
 @Composable
 fun NightjarTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = NightjarColors, typography = typography, content = content)
+    // Left to right everywhere, whatever language the phone is set to. Every word in the app is
+    // English, so a Hebrew or Arabic phone mirrored the layout around English text and delivered
+    // nothing but bugs: the time wheels read minutes-then-hours, the keypad read 3-2-1, sums with
+    // no letters in them rendered back to front, and chart labels slid under the wrong bars. When
+    // the app is translated, this is the line to revisit.
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        MaterialTheme(colorScheme = NightjarColors, typography = typography, content = content)
+    }
 }

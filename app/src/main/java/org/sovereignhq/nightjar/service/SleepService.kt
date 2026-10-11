@@ -384,16 +384,16 @@ class SleepService : Service(), NightRecorder.Listener, EventDetector.Listener {
         if (!player.isPlaying) return
         main.removeCallbacks(restoreSound)
         main.postDelayed(restoreSound, QUIET_GRACE_MS)
+        SleepState.setAlarmQuietUntil(System.currentTimeMillis() + QUIET_GRACE_MS)
         if (player.isQuiet) return
         player.quieten()
-        SleepState.setAlarmQuiet(true)
         updateNotification("Alarm silenced - still waiting for you", force = true)
     }
 
     private val restoreSound = Runnable {
         if (player.isPlaying && player.isQuiet) {
             player.restoreVolume()
-            SleepState.setAlarmQuiet(false)
+            SleepState.setAlarmQuietUntil(0L)
             updateNotification("Alarm ringing", force = true)
         }
     }
@@ -512,7 +512,7 @@ class SleepService : Service(), NightRecorder.Listener, EventDetector.Listener {
         }
         val recorded = if (clips.isEmpty()) "" else " - ${clips.size} recorded"
         if (alarmTargetMs <= 0L) return "$elapsed$recorded - no alarm"
-        val target = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+        val target = java.text.SimpleDateFormat("HH:mm", java.util.Locale.ENGLISH)
             .format(java.util.Date(alarmTargetMs))
         return "$elapsed$recorded - waking you by $target"
     }
