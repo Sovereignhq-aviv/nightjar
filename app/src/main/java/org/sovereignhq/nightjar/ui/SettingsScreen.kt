@@ -1,6 +1,5 @@
 package org.sovereignhq.nightjar.ui
 
-import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.media.RingtoneManager
@@ -26,7 +25,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -47,13 +45,10 @@ import org.sovereignhq.nightjar.audio.AudioSetLabels
 import org.sovereignhq.nightjar.data.EventKind
 import org.sovereignhq.nightjar.data.Sensitivity
 import org.sovereignhq.nightjar.alarm.PuzzleGenerator
-import org.sovereignhq.nightjar.alarm.WakeCode
 import org.sovereignhq.nightjar.service.AlarmScheduler
 import org.sovereignhq.nightjar.service.Notifications
 import org.sovereignhq.nightjar.service.SleepService
-import org.sovereignhq.nightjar.ui.components.CodeScanner
 import org.sovereignhq.nightjar.ui.components.HairLine
-import org.sovereignhq.nightjar.ui.components.hasCameraPermission
 import org.sovereignhq.nightjar.ui.components.UpdateCard
 import org.sovereignhq.nightjar.ui.components.MicCheckCard
 import org.sovereignhq.nightjar.ui.components.LegendDot
@@ -432,9 +427,17 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
             HairLine()
             Spacer(Modifier.height(16.dp))
 
-            WakeCodeSetting(
+            // One check at a time: registering either clears the other.
+            WakeMissionSetting(
                 wakeCode = settings.wakeCode,
-                onChange = { code -> vm.updateSettings { copy(wakeCode = code) } }
+                wakePhotoRefs = settings.wakePhotoRefs,
+                onCode = { code -> vm.updateSettings { copy(wakeCode = code, wakePhotoRefs = "") } },
+                onPhoto = { refs, threshold ->
+                    vm.updateSettings {
+                        copy(wakePhotoRefs = refs, wakePhotoThreshold = threshold, wakeCode = "")
+                    }
+                },
+                onOff = { vm.updateSettings { copy(wakeCode = "", wakePhotoRefs = "") } }
             )
 
             Spacer(Modifier.height(18.dp))
@@ -747,156 +750,3 @@ private fun displayNameOf(context: Context, uri: Uri): String = runCatching {
         .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
         ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
 }.getOrNull() ?: "Chosen audio file"
-
-/**
- * Registers the code that has to be scanned to switch the alarm off.
- *
- * Registering is the moment to ask for the camera, while the app is open and in your hand. Asking at
- * the alarm itself would put a permission dialog in front of someone half asleep, over a lock screen
- * that may not even show it.
- */
-@Composable
-private fun WakeCodeSetting(wakeCode: String, onChange: (String) -> Unit) {
-    val context = LocalContext.current
-    var scanning by remember { mutableStateOf(false) }
-    var refused by remember { mutableStateOf(false) }
-    // What the camera read, waiting for a yes. Saving the first code in view meant a barcode on
-    // the shelf behind the one you meant could become the only way to switch the alarm off.
-    var pending by remember { mutableStateOf<String?>(null) }
-    var confirmingOff by remember { mutableStateOf(false) }
-
-    val cameraPermission = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        refused = !granted
-        scanning = granted
-    }
-
-    SectionLabel("Scan a code to switch it off")
-    Spacer(Modifier.height(6.dp))
-    Text(
-        "Stick any QR code or barcode somewhere away from the bed - the bathroom works - and the " +
-            "alarm only switches off once you have walked there and scanned it. The room goes " +
-            "silent while you do. A shampoo bottle's barcode is fine.",
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-    Spacer(Modifier.height(10.dp))
-
-    when {
-        scanning -> {
-            CodeScanner(
-                onCode = { code ->
-                    if (scanning && code.isNotBlank()) {
-                        scanning = false
-                        pending = code.trim()
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(260.dp)
-                    .clip(RoundedCornerShape(14.dp))
-            )
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = { scanning = false },
-                modifier = Modifier.fillMaxWidth().height(48.dp)
-            ) { Text("Cancel") }
-        }
-
-        pending != null -> {
-            Text(
-                "Read: ${WakeCode.preview(pending.orEmpty())}",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "Make sure this is the code you will stick up, not something else that was in view.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedButton(
-                    onClick = { pending = null; scanning = true },
-                    modifier = Modifier.weight(1f).height(48.dp)
-                ) { Text("Scan again") }
-                Button(
-                    onClick = { onChange(pending.orEmpty()); pending = null },
-                    modifier = Modifier.weight(1f).height(48.dp)
-                ) { Text("Use this code") }
-            }
-        }
-
-        wakeCode.isNotBlank() -> {
-            Text(
-                "Registered: ${WakeCode.preview(wakeCode)}",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedButton(
-                    onClick = {
-                        if (hasCameraPermission(context)) scanning = true
-                        else cameraPermission.launch(Manifest.permission.CAMERA)
-                    },
-                    modifier = Modifier.weight(1f).height(48.dp)
-                ) { Text("Scan a new one") }
-                OutlinedButton(
-                    onClick = { confirmingOff = true },
-                    modifier = Modifier.weight(1f).height(48.dp)
-                ) { Text("Turn off") }
-            }
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "Travelling? Turn it off before you go. If you forget, the alarm offers five " +
-                    "three-digit sums instead.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        else -> OutlinedButton(
-            onClick = {
-                if (hasCameraPermission(context)) scanning = true
-                else cameraPermission.launch(Manifest.permission.CAMERA)
-            },
-            modifier = Modifier.fillMaxWidth().height(48.dp)
-        ) { Text("Register a code") }
-    }
-
-    if (confirmingOff) {
-        AlertDialog(
-            onDismissRequest = { confirmingOff = false },
-            title = { Text("Turn off the scan?") },
-            text = {
-                Text(
-                    "The alarm will switch off without walking to the code. Registering it again " +
-                        "means scanning it again.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { confirmingOff = false; onChange("") }) {
-                    Text("Turn off", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmingOff = false }) { Text("Keep it") }
-            }
-        )
-    }
-
-    if (refused) {
-        Spacer(Modifier.height(6.dp))
-        Text(
-            "Without the camera Nightjar cannot read a code. Allow it in Android's settings for " +
-                "Nightjar, then try again.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.error
-        )
-    }
-}
-

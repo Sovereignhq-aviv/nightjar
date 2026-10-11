@@ -25,12 +25,15 @@ import androidx.compose.material.icons.rounded.Backspace
 import androidx.compose.material.icons.rounded.VolumeOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -48,9 +51,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 import java.util.Locale
 import org.sovereignhq.nightjar.alarm.MathPuzzle
+import org.sovereignhq.nightjar.alarm.PlaceEmbedder
+import org.sovereignhq.nightjar.alarm.PlaceMatch
 import org.sovereignhq.nightjar.alarm.PuzzleGenerator
 import org.sovereignhq.nightjar.alarm.WakeCode
 import org.sovereignhq.nightjar.ui.formatClock
@@ -68,14 +74,17 @@ import org.sovereignhq.nightjar.ui.formatClock
  * so silencing the room is never the same thing as switching the alarm off. Starting to switch the
  * alarm off presses it for you: nobody else in the room should have to listen while you do sums.
  *
- * Switching off runs in a fixed order: scan the wake code if one is registered, then the sums if any
- * are set. The scan comes first because it is the step that gets you out of bed.
+ * Switching off runs in a fixed order: the check away from the bed if one is registered (a barcode
+ * or a photo of a place), then the sums if any are set. The check comes first because it is the step
+ * that gets you out of bed.
  */
 @Composable
 fun AlarmSurface(
     puzzleDigits: Int,
     puzzleCount: Int,
     wakeCode: String,
+    wakePhotoRefs: String,
+    wakePhotoThreshold: Float,
     quietUntilMs: Long,
     onQuieten: () -> Unit,
     onSnooze: () -> Unit,
@@ -92,7 +101,8 @@ fun AlarmSurface(
         }
     }
 
-    val needsScan = wakeCode.isNotBlank()
+    val needsPhoto = wakePhotoRefs.isNotBlank()
+    val needsScan = !needsPhoto && wakeCode.isNotBlank()
     val afterScan = { if (puzzleDigits > 0) step = OffStep.SUMS else onDismiss() }
 
     Column(
@@ -113,6 +123,16 @@ fun AlarmSurface(
                 onGiveUp = { step = OffStep.HOME }
             )
 
+            OffStep.PHOTO -> PhotoGate(
+                references = wakePhotoRefs,
+                threshold = wakePhotoThreshold,
+                quietUntilMs = quietUntilMs,
+                onQuieten = onQuieten,
+                onMatched = afterScan,
+                onCannotMatch = { step = OffStep.FALLBACK },
+                onGiveUp = { step = OffStep.HOME }
+            )
+
             OffStep.SUMS -> PuzzleGate(
                 digits = puzzleDigits,
                 count = puzzleCount,
@@ -129,7 +149,7 @@ fun AlarmSurface(
                 count = PuzzleGenerator.MAX_PUZZLES,
                 onKeyPress = onQuieten,
                 onSolved = onDismiss,
-                onGiveUp = { step = OffStep.SCAN }
+                onGiveUp = { step = if (needsPhoto) OffStep.PHOTO else OffStep.SCAN }
             )
 
             OffStep.HOME -> {
@@ -143,7 +163,7 @@ fun AlarmSurface(
 
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    text = describeSwitchOff(needsScan, puzzleDigits, puzzleCount),
+                    text = describeSwitchOff(needsScan, needsPhoto, puzzleDigits, puzzleCount),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -154,6 +174,7 @@ fun AlarmSurface(
                 Button(
                     onClick = {
                         when {
+                            needsPhoto -> { onQuieten(); step = OffStep.PHOTO }
                             needsScan -> { onQuieten(); step = OffStep.SCAN }
                             puzzleDigits > 0 -> { onQuieten(); step = OffStep.SUMS }
                             else -> onDismiss()
@@ -165,7 +186,7 @@ fun AlarmSurface(
                     shape = RoundedCornerShape(18.dp)
                 ) {
                     Text(
-                        text = if (needsScan || puzzleDigits > 0) "Wake me up" else "I'm up",
+                        text = if (needsScan || needsPhoto || puzzleDigits > 0) "Wake me up" else "I'm up",
                         style = MaterialTheme.typography.titleLarge
                     )
                 }
@@ -193,13 +214,18 @@ fun AlarmSurface(
     }
 }
 
-private enum class OffStep { HOME, SCAN, SUMS, FALLBACK }
+private enum class OffStep { HOME, SCAN, PHOTO, SUMS, FALLBACK }
 
-private fun describeSwitchOff(needsScan: Boolean, digits: Int, count: Int): String {
+private fun describeSwitchOff(needsScan: Boolean, needsPhoto: Boolean, digits: Int, count: Int): String {
     val sums = if (digits > 0) PuzzleGenerator.describe(digits, count).lowercase() else null
+    val away = when {
+        needsPhoto -> "the camera pointed at your place"
+        needsScan -> "your wake code scanned"
+        else -> null
+    }
     val switchOff = when {
-        needsScan && sums != null -> "Switching it off needs your wake code scanned, then $sums."
-        needsScan -> "Switching it off needs your wake code scanned."
+        away != null && sums != null -> "Switching it off needs $away, then $sums."
+        away != null -> "Switching it off needs $away."
         sums != null -> "Switching it off needs $sums."
         else -> null
     }
@@ -290,6 +316,111 @@ private fun ScanGate(
         TextAction("Back", onGiveUp)
     }
 }
+
+/**
+ * Point the camera at the registered place. It has to match on several frames in a row, so one
+ * lucky frame of a similar-looking wall does not count.
+ */
+@Composable
+private fun PhotoGate(
+    references: String,
+    threshold: Float,
+    quietUntilMs: Long,
+    onQuieten: () -> Unit,
+    onMatched: () -> Unit,
+    onCannotMatch: () -> Unit,
+    onGiveUp: () -> Unit
+) {
+    val context = LocalContext.current
+    val cameraAllowed = remember { hasCameraPermission(context) }
+    val refs = remember(references) { PlaceMatch.decode(references) }
+    val embedder = remember { PlaceEmbedder.create(context) }
+    DisposableEffect(embedder) { onDispose { embedder?.close() } }
+    var score by remember { mutableFloatStateOf(0f) }
+    var streak by remember { mutableIntStateOf(0) }
+    var done by remember { mutableStateOf(false) }
+    val usable = cameraAllowed && embedder != null && refs.isNotEmpty()
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            "Go and point the camera at your place",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(14.dp))
+
+        if (usable) {
+            PlaceCamera(
+                onFrame = { frame ->
+                    if (done) return@PlaceCamera
+                    val live = embedder?.embed(frame) ?: return@PlaceCamera
+                    val now = PlaceMatch.bestMatch(live, refs)
+                    score = now
+                    streak = if (now >= threshold) streak + 1 else 0
+                    if (streak >= MATCH_FRAMES && !done) {
+                        done = true
+                        ContextCompat.getMainExecutor(context).execute { onMatched() }
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(300.dp)
+                    .clip(RoundedCornerShape(18.dp))
+            )
+            Spacer(Modifier.height(10.dp))
+            LinearProgressIndicator(
+                progress = { (score / threshold).coerceIn(0f, 1f) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(4.dp))
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = if (score >= threshold) "That's it - hold still" else "Closer to how you took the photos",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+            )
+        } else {
+            Text(
+                if (!cameraAllowed) {
+                    "Nightjar is not allowed to use the camera any more, so it cannot check the place. " +
+                        "Use the sums instead, and allow the camera again in Settings later."
+                } else {
+                    "The photo check is not working on this phone right now. Use the sums instead."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                textAlign = TextAlign.Center
+            )
+        }
+
+        Spacer(Modifier.height(10.dp))
+        QuietButton(quietUntilMs = quietUntilMs, onQuieten = onQuieten)
+        Spacer(Modifier.height(20.dp))
+
+        OutlinedButton(
+            onClick = onCannotMatch,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(18.dp)
+        ) {
+            Text(
+                "Won't match? Do sums instead",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        TextAction("Back", onGiveUp)
+    }
+}
+
+/** About a second of agreement at the camera's 400ms frame rate. */
+private const val MATCH_FRAMES = 3
 
 @Composable
 private fun TextAction(label: String, onClick: () -> Unit) {

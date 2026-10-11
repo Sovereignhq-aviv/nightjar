@@ -72,6 +72,12 @@ jobs:
           curl -fsSL -o app/src/main/assets/yamnet.tflite https://storage.googleapis.com/mediapipe-models/audio_classifier/yamnet/float32/1/yamnet.tflite
           ls -l app/src/main/assets/yamnet.tflite
 
+      # MobileNet V3 small (Apache 2.0), for the photo check. Fetched the same way, for the same reason.
+      - name: Fetch the image model
+        run: |
+          curl -fsSL -o app/src/main/assets/mobilenet_v3_small.tflite https://storage.googleapis.com/mediapipe-models/image_embedder/mobilenet_v3_small/float32/1/mobilenet_v3_small.tflite
+          ls -l app/src/main/assets/mobilenet_v3_small.tflite
+
       # Pinned rather than using whatever Gradle the runner ships, because Android Gradle Plugin 8.7
       # is only compatible with a known Gradle range.
       - name: Set up Gradle 8.9
