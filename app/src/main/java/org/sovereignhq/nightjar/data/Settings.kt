@@ -114,6 +114,19 @@ class Settings(context: Context) {
         get() = prefs.getString("wake_code", "") ?: ""
         set(v) = prefs.edit().putString("wake_code", v).apply()
 
+    /**
+     * Embeddings of the registered place's photos (see PlaceMatch), or empty for no photo check.
+     * Only these numbers are kept - the photos themselves are never written anywhere.
+     */
+    var wakePhotoRefs: String
+        get() = prefs.getString("wake_photo_refs", "") ?: ""
+        set(v) = prefs.edit().putString("wake_photo_refs", v).apply()
+
+    /** The pass mark worked out from those photos when they were taken. */
+    var wakePhotoThreshold: Float
+        get() = prefs.getFloat("wake_photo_threshold", 0.8f)
+        set(v) = prefs.edit().putFloat("wake_photo_threshold", v).apply()
+
     /** Empty means "use the system default alarm sound". */
     var alarmSoundUri: String
         get() = prefs.getString("alarm_sound_uri", "") ?: ""
@@ -206,6 +219,8 @@ class Settings(context: Context) {
         puzzleDigits = puzzleDigits,
         puzzleCount = puzzleCount,
         wakeCode = wakeCode,
+        wakePhotoRefs = wakePhotoRefs,
+        wakePhotoThreshold = wakePhotoThreshold,
         alarmSoundUri = alarmSoundUri,
         alarmSoundLabel = alarmSoundLabel,
         mutedLabels = mutedLabels,
@@ -237,6 +252,8 @@ data class SettingsSnapshot(
     val puzzleDigits: Int,
     val puzzleCount: Int,
     val wakeCode: String,
+    val wakePhotoRefs: String,
+    val wakePhotoThreshold: Float,
     val alarmSoundUri: String,
     val alarmSoundLabel: String,
     val mutedLabels: Set<String>,
@@ -259,6 +276,8 @@ data class SettingsSnapshot(
         settings.puzzleDigits = puzzleDigits
         settings.puzzleCount = puzzleCount
         settings.wakeCode = wakeCode
+        settings.wakePhotoRefs = wakePhotoRefs
+        settings.wakePhotoThreshold = wakePhotoThreshold
         settings.alarmSoundUri = alarmSoundUri
         settings.alarmSoundLabel = alarmSoundLabel
         settings.mutedLabels = mutedLabels

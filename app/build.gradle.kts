@@ -16,8 +16,8 @@ android {
         minSdk = 27
         targetSdk = 35
         // Bumped on every release. The updater compares versionName against the release tag.
-        versionCode = 6
-        versionName = "1.3.2"
+        versionCode = 7
+        versionName = "1.4.0"
     }
 
     signingConfigs {
@@ -92,6 +92,13 @@ dependencies {
 
     // Reads the wake code. Plain open-source Java, on the phone, no Play services and no telemetry.
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+
+    // The photo check: CameraX for the frames, MediaPipe Vision to compare them, on the phone.
+    implementation("com.google.mediapipe:tasks-vision:0.10.14")
+    implementation("androidx.camera:camera-core:1.3.4")
+    implementation("androidx.camera:camera-camera2:1.3.4")
+    implementation("androidx.camera:camera-lifecycle:1.3.4")
+    implementation("androidx.camera:camera-view:1.3.4")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")

@@ -12,3 +12,4 @@ captures/
 *.keystore
 out/
 app/src/main/assets/yamnet.tflite
+app/src/main/assets/mobilenet_v3_small.tflite
