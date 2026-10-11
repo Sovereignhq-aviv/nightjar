@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -113,9 +114,10 @@ fun DockedPlayer(
                 Box {
                     Row(
                         Modifier
+                            .heightIn(min = 48.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .clickable { menuOpen = true }
-                            .padding(horizontal = 4.dp, vertical = 6.dp),
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
@@ -278,10 +280,12 @@ fun DockedPlayer(
 
                 Box(
                     Modifier
+                        .heightIn(min = 48.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .background(MaterialTheme.colorScheme.surface)
                         .clickable(onClick = onCycleSpeed)
-                        .padding(horizontal = 10.dp, vertical = 10.dp)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = if (speed == 1f) "1x" else if (speed == 1.5f) "1.5x" else "2x",

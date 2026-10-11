@@ -195,6 +195,7 @@ private fun NightHeader(
                 Row(
                     Modifier
                         .clip(RoundedCornerShape(14.dp))
+                        .heightIn(min = 48.dp)
                         .background(MaterialTheme.colorScheme.primaryContainer)
                         .clickable(onClick = onStartNight)
                         .padding(horizontal = 14.dp, vertical = 12.dp),
@@ -228,7 +229,9 @@ private fun NightHeader(
                                 else MaterialTheme.colorScheme.surfaceVariant
                             )
                             .clickable { vm.selectSession(night.id) }
-                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                            .heightIn(min = 48.dp)
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = formatShortDay(night.startedAtMs),
@@ -287,6 +290,7 @@ private fun FilterChip(
     Row(
         Modifier
             .clip(RoundedCornerShape(20.dp))
+            .heightIn(min = 48.dp)
             .background(if (selected) accent else MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
@@ -350,7 +354,9 @@ private fun SortRow(vm: SleepViewModel, shown: Int) {
                             else MaterialTheme.colorScheme.surfaceVariant
                         )
                         .clickable { vm.chooseSort(option) }
-                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                        .heightIn(min = 48.dp)
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = if (option == ClipSort.TIME) "By time" else "Loudest",
