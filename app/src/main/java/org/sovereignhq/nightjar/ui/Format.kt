@@ -5,11 +5,13 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private val clock = SimpleDateFormat("HH:mm", Locale.getDefault())
-private val clockSeconds = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-private val dayMonth = SimpleDateFormat("EEE d MMM", Locale.getDefault())
-private val shortDay = SimpleDateFormat("d MMM", Locale.getDefault())
-private val weekday = SimpleDateFormat("EEE", Locale.getDefault())
+// English, not the phone's language: the rest of the screen is English, and a Hebrew day name in
+// the middle of an English heading reads as a glitch. 24-hour throughout, matching the alarm wheels.
+private val clock = SimpleDateFormat("HH:mm", Locale.ENGLISH)
+private val clockSeconds = SimpleDateFormat("HH:mm:ss", Locale.ENGLISH)
+private val dayMonth = SimpleDateFormat("EEE d MMM", Locale.ENGLISH)
+private val shortDay = SimpleDateFormat("d MMM", Locale.ENGLISH)
+private val weekday = SimpleDateFormat("EEE", Locale.ENGLISH)
 
 fun formatClock(ms: Long): String = clock.format(Date(ms))
 
@@ -29,7 +31,8 @@ fun formatDuration(minutes: Int): String {
     return if (h == 0) "${m}m" else if (m == 0) "${h}h" else "${h}h ${m}m"
 }
 
-fun formatHourMinute(hour: Int, minute: Int): String = "%02d:%02d".format(hour, minute)
+fun formatHourMinute(hour: Int, minute: Int): String =
+    String.format(Locale.ROOT, "%02d:%02d", hour, minute)
 
 fun eventLabel(kind: EventKind): String = when (kind) {
     EventKind.SNORE -> "Snoring"

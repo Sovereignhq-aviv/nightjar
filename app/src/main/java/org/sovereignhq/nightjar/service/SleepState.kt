@@ -43,9 +43,13 @@ object SleepState {
     private val _alarmRinging = MutableStateFlow(false)
     val alarmRinging: StateFlow<Boolean> = _alarmRinging.asStateFlow()
 
-    /** Ringing, but silenced on request. */
-    private val _alarmQuiet = MutableStateFlow(false)
-    val alarmQuiet: StateFlow<Boolean> = _alarmQuiet.asStateFlow()
+    /**
+     * When a silenced alarm gets its sound back, or 0 when it is not silenced. A deadline rather than
+     * a flag, so the wake-up screen can count it down - walking to the bathroom with an invisible
+     * timer running was the weak middle of the morning.
+     */
+    private val _alarmQuietUntilMs = MutableStateFlow(0L)
+    val alarmQuietUntilMs: StateFlow<Long> = _alarmQuietUntilMs.asStateFlow()
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
@@ -83,10 +87,10 @@ object SleepState {
     fun setEventCount(v: Int) { _eventCount.value = v }
     fun setAlarmRinging(v: Boolean) {
         _alarmRinging.value = v
-        if (!v) _alarmQuiet.value = false
+        if (!v) _alarmQuietUntilMs.value = 0L
     }
 
-    fun setAlarmQuiet(v: Boolean) { _alarmQuiet.value = v }
+    fun setAlarmQuietUntil(ms: Long) { _alarmQuietUntilMs.value = ms }
     fun setError(message: String?) { _error.value = message }
     fun consumeFinishedSession() { _finishedSessionId.value = null }
 }

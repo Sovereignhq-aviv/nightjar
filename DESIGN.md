@@ -100,3 +100,7 @@ No orchestrated load sequences. No decorative motion anywhere.
   AOSP Clock.
 - **Screen brightness is forced to minimum** on the night screen, overriding the system value, and
   restored on exit.
+- **Left to right on every phone.** `NightjarTheme` pins `LayoutDirection.Ltr`. All copy is English,
+  so mirroring on a Hebrew or Arabic phone only produced bugs: reversed time wheels and keypad, sums
+  rendered back to front, chart labels under the wrong bars. Dates format in English and times are
+  24-hour everywhere, for the same reason. Revisit when the app is translated.

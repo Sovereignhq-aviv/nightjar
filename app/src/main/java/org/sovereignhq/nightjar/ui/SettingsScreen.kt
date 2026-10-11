@@ -24,6 +24,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
@@ -433,10 +436,35 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
             )
 
             Spacer(Modifier.height(18.dp))
+            var confirmingTest by remember { mutableStateOf(false) }
             OutlinedButton(
-                onClick = { SleepService.send(context, SleepService.ACTION_FIRE_ALARM) },
+                onClick = { confirmingTest = true },
                 modifier = Modifier.fillMaxWidth().height(48.dp)
             ) { Text("Test the alarm now") }
+
+            // People set this up at bedtime, often with someone already asleep beside them.
+            if (confirmingTest) {
+                AlertDialog(
+                    onDismissRequest = { confirmingTest = false },
+                    title = { Text("Ring the alarm now?") },
+                    text = {
+                        Text(
+                            "It rings exactly like a real morning, at your phone's alarm volume. " +
+                                "If someone is asleep nearby, try it later.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            confirmingTest = false
+                            SleepService.send(context, SleepService.ACTION_FIRE_ALARM)
+                        }) { Text("Ring it") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { confirmingTest = false }) { Text("Not now") }
+                    }
+                )
+            }
             Spacer(Modifier.height(6.dp))
             Text(
                 "Worth doing once. It also tells you whether your alarm volume is turned up.",
@@ -729,6 +757,10 @@ private fun WakeCodeSetting(wakeCode: String, onChange: (String) -> Unit) {
     val context = LocalContext.current
     var scanning by remember { mutableStateOf(false) }
     var refused by remember { mutableStateOf(false) }
+    // What the camera read, waiting for a yes. Saving the first code in view meant a barcode on
+    // the shelf behind the one you meant could become the only way to switch the alarm off.
+    var pending by remember { mutableStateOf<String?>(null) }
+    var confirmingOff by remember { mutableStateOf(false) }
 
     val cameraPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -754,7 +786,7 @@ private fun WakeCodeSetting(wakeCode: String, onChange: (String) -> Unit) {
                 onCode = { code ->
                     if (scanning && code.isNotBlank()) {
                         scanning = false
-                        onChange(code.trim())
+                        pending = code.trim()
                     }
                 },
                 modifier = Modifier
@@ -767,6 +799,31 @@ private fun WakeCodeSetting(wakeCode: String, onChange: (String) -> Unit) {
                 onClick = { scanning = false },
                 modifier = Modifier.fillMaxWidth().height(48.dp)
             ) { Text("Cancel") }
+        }
+
+        pending != null -> {
+            Text(
+                "Read: ${WakeCode.preview(pending.orEmpty())}",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Make sure this is the code you will stick up, not something else that was in view.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(
+                    onClick = { pending = null; scanning = true },
+                    modifier = Modifier.weight(1f).height(48.dp)
+                ) { Text("Scan again") }
+                Button(
+                    onClick = { onChange(pending.orEmpty()); pending = null },
+                    modifier = Modifier.weight(1f).height(48.dp)
+                ) { Text("Use this code") }
+            }
         }
 
         wakeCode.isNotBlank() -> {
@@ -785,7 +842,7 @@ private fun WakeCodeSetting(wakeCode: String, onChange: (String) -> Unit) {
                     modifier = Modifier.weight(1f).height(48.dp)
                 ) { Text("Scan a new one") }
                 OutlinedButton(
-                    onClick = { onChange("") },
+                    onClick = { confirmingOff = true },
                     modifier = Modifier.weight(1f).height(48.dp)
                 ) { Text("Turn off") }
             }
@@ -805,6 +862,28 @@ private fun WakeCodeSetting(wakeCode: String, onChange: (String) -> Unit) {
             },
             modifier = Modifier.fillMaxWidth().height(48.dp)
         ) { Text("Register a code") }
+    }
+
+    if (confirmingOff) {
+        AlertDialog(
+            onDismissRequest = { confirmingOff = false },
+            title = { Text("Turn off the scan?") },
+            text = {
+                Text(
+                    "The alarm will switch off without walking to the code. Registering it again " +
+                        "means scanning it again.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { confirmingOff = false; onChange("") }) {
+                    Text("Turn off", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmingOff = false }) { Text("Keep it") }
+            }
+        )
     }
 
     if (refused) {

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,10 +41,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import java.util.Locale
 import org.sovereignhq.nightjar.alarm.MathPuzzle
 import org.sovereignhq.nightjar.alarm.PuzzleGenerator
 import org.sovereignhq.nightjar.alarm.WakeCode
@@ -70,7 +76,7 @@ fun AlarmSurface(
     puzzleDigits: Int,
     puzzleCount: Int,
     wakeCode: String,
-    quietened: Boolean,
+    quietUntilMs: Long,
     onQuieten: () -> Unit,
     onSnooze: () -> Unit,
     onDismiss: () -> Unit,
@@ -100,7 +106,7 @@ fun AlarmSurface(
         when (step) {
             OffStep.SCAN -> ScanGate(
                 wakeCode = wakeCode,
-                quietened = quietened,
+                quietUntilMs = quietUntilMs,
                 onQuieten = onQuieten,
                 onScanned = afterScan,
                 onCannotScan = { step = OffStep.FALLBACK },
@@ -181,7 +187,7 @@ fun AlarmSurface(
                 }
 
                 Spacer(Modifier.height(24.dp))
-                QuietButton(quietened = quietened, onQuieten = onQuieten)
+                QuietButton(quietUntilMs = quietUntilMs, onQuieten = onQuieten)
             }
         }
     }
@@ -208,7 +214,7 @@ private fun describeSwitchOff(needsScan: Boolean, digits: Int, count: Int): Stri
 @Composable
 private fun ScanGate(
     wakeCode: String,
-    quietened: Boolean,
+    quietUntilMs: Long,
     onQuieten: () -> Unit,
     onScanned: () -> Unit,
     onCannotScan: () -> Unit,
@@ -234,7 +240,9 @@ private fun ScanGate(
                     when {
                         done -> Unit
                         WakeCode.matches(scanned, wakeCode) -> { done = true; onScanned() }
-                        else -> wrongCode = true
+                        // Pointing the camera at the wrong code still means you are up and trying,
+                        // so it buys more quiet - once per mistake, not once per camera frame.
+                        !wrongCode -> { wrongCode = true; onQuieten() }
                     }
                 },
                 modifier = Modifier
@@ -255,17 +263,31 @@ private fun ScanGate(
         Text(
             text = if (wrongCode) "That is a different code." else " ",
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.error
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
         )
 
         Spacer(Modifier.height(10.dp))
-        QuietButton(quietened = quietened, onQuieten = onQuieten)
-        Spacer(Modifier.height(10.dp))
+        QuietButton(quietUntilMs = quietUntilMs, onQuieten = onQuieten)
+        Spacer(Modifier.height(20.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextAction("Back", onGiveUp)
-            TextAction("Can't scan it?", onCannotScan)
+        // A real button, well apart from Back: side by side as two text links, a sleepy thumb hit
+        // whichever was nearer.
+        OutlinedButton(
+            onClick = onCannotScan,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(18.dp)
+        ) {
+            Text(
+                "Can't scan it? Do sums instead",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
+        Spacer(Modifier.height(8.dp))
+        TextAction("Back", onGiveUp)
     }
 }
 
@@ -277,26 +299,38 @@ private fun TextAction(label: String, onClick: () -> Unit) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier
             .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 12.dp)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 24.dp, vertical = 14.dp)
     )
 }
 
-/** Silences the room without ending the alarm. */
+/**
+ * Silences the room without ending the alarm, and says for how long.
+ *
+ * It stays pressable while quiet: each press restarts the grace period, which is what makes the walk
+ * to a bathroom code survivable. The countdown is the point - without it the sound came back as a
+ * surprise, usually after you had put the phone down somewhere.
+ */
 @Composable
-private fun QuietButton(quietened: Boolean, onQuieten: () -> Unit) {
+private fun QuietButton(quietUntilMs: Long, onQuieten: () -> Unit) {
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(quietUntilMs) {
+        while (quietUntilMs > System.currentTimeMillis()) {
+            now = System.currentTimeMillis()
+            delay(1_000)
+        }
+        now = System.currentTimeMillis()
+    }
+    val secondsLeft = ((quietUntilMs - now + 999) / 1_000).coerceAtLeast(0)
+    val quiet = secondsLeft > 0
+
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Row(
             Modifier
+                .heightIn(min = 52.dp)
                 .clip(RoundedCornerShape(14.dp))
-                .background(
-                    if (quietened) {
-                        MaterialTheme.colorScheme.surface
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    }
-                )
-                .clickable(enabled = !quietened, onClick = onQuieten)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .clickable(role = Role.Button, onClick = onQuieten)
                 .padding(horizontal = 18.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -306,16 +340,21 @@ private fun QuietButton(quietened: Boolean, onQuieten: () -> Unit) {
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.width(20.dp)
             )
+            Spacer(Modifier.width(8.dp))
             Text(
-                text = if (quietened) "  Sound off" else "  Quiet it",
+                text = if (quiet) {
+                    "Silent for ${secondsLeft / 60}:${String.format(Locale.ROOT, "%02d", secondsLeft % 60)}"
+                } else {
+                    "Quiet it"
+                },
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            text = if (quietened) {
-                "The sound comes back shortly unless you switch the alarm off."
+            text = if (quiet) {
+                "Tap again for more time. The sound comes back when this runs out."
             } else {
                 "Silences it now without switching the alarm off, so you can get up without waking " +
                     "anyone else."
@@ -384,17 +423,22 @@ private fun PuzzleGate(
         Text(
             text = if (wrong) "Not quite. Try again." else " ",
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.error
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
         )
 
         Spacer(Modifier.height(14.dp))
 
         Keypad(
             onAnyKey = onKeyPress,
+            // A wrong answer stays on screen, in red, until the next key replaces it - wiping it
+            // instantly left nothing to compare against when working out where the sum went wrong.
             onDigit = { d ->
-                if (entry.length < 6) {
-                    entry += d
+                if (wrong) {
+                    entry = d
                     wrong = false
+                } else if (entry.length < 6) {
+                    entry += d
                 }
             },
             onBackspace = { entry = entry.dropLast(1); wrong = false },
@@ -407,10 +451,7 @@ private fun PuzzleGate(
                         wrong = false
                         if (index + 1 >= puzzles.size) onSolved() else index++
                     }
-                    else -> {
-                        wrong = true
-                        entry = ""
-                    }
+                    else -> wrong = true
                 }
             }
         )
@@ -463,7 +504,7 @@ private fun Keypad(
                                     else -> MaterialTheme.colorScheme.surfaceVariant
                                 }
                             )
-                            .clickable {
+                            .clickable(role = Role.Button) {
                                 onAnyKey()
                                 when {
                                     isOk -> onSubmit()
