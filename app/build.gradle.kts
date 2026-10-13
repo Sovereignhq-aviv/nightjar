@@ -16,8 +16,8 @@ android {
         minSdk = 27
         targetSdk = 35
         // Bumped on every release. The updater compares versionName against the release tag.
-        versionCode = 8
-        versionName = "1.4.1"
+        versionCode = 9
+        versionName = "1.4.2"
 
         // 64-bit ARM only. MediaPipe ships native code for four processor types and every phone sold
         // in years uses this one; the other three were half the download for no one. An older
@@ -98,8 +98,9 @@ dependencies {
     // Reads the wake code. Plain open-source Java, on the phone, no Play services and no telemetry.
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 
-    // The photo check: CameraX for the frames, MediaPipe Vision to compare them, on the phone.
-    implementation("com.google.mediapipe:tasks-vision:0.10.14")
+    // The photo check: CameraX for the frames, TensorFlow Lite to compare them, on the phone.
+    // Not MediaPipe Vision - it cannot load alongside MediaPipe Audio in one process (see PlaceEmbedder).
+    implementation("org.tensorflow:tensorflow-lite:2.16.1")
     implementation("androidx.camera:camera-core:1.3.4")
     implementation("androidx.camera:camera-camera2:1.3.4")
     implementation("androidx.camera:camera-lifecycle:1.3.4")

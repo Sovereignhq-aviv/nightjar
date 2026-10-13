@@ -141,12 +141,13 @@ fun AlarmSurface(
                 onGiveUp = { step = OffStep.HOME }
             )
 
-            // The way out when the code cannot be scanned - a hotel room, a broken camera. It has to
-            // cost more than walking to the bathroom would, or it becomes the way everyone switches
-            // the alarm off.
+            // The way out when the camera check cannot be done - a hotel room, a broken camera, a
+            // product that ran out. It costs a little more than your usual sums (three of them, at
+            // your own difficulty) so it is not the easy route, but no more: it used to be five
+            // three-digit sums, which punished you for the camera's failure rather than yours.
             OffStep.FALLBACK -> PuzzleGate(
-                digits = 3,
-                count = PuzzleGenerator.MAX_PUZZLES,
+                digits = if (puzzleDigits > 0) puzzleDigits else FALLBACK_DIGITS,
+                count = FALLBACK_SUMS,
                 onKeyPress = onQuieten,
                 onSolved = onDismiss,
                 onGiveUp = { step = if (needsPhoto) OffStep.PHOTO else OffStep.SCAN }
@@ -215,6 +216,11 @@ fun AlarmSurface(
 }
 
 private enum class OffStep { HOME, SCAN, PHOTO, SUMS, FALLBACK }
+
+private const val FALLBACK_SUMS = 3
+
+/** Difficulty for the fallback when no sums are set: two digits, mental arithmetic, not a test. */
+private const val FALLBACK_DIGITS = 2
 
 private fun describeSwitchOff(needsScan: Boolean, needsPhoto: Boolean, digits: Int, count: Int): String {
     val sums = if (digits > 0) PuzzleGenerator.describe(digits, count).lowercase() else null
@@ -562,29 +568,28 @@ private fun PuzzleGate(
 
         Keypad(
             onAnyKey = onKeyPress,
-            // A wrong answer stays on screen, in red, until the next key replaces it - wiping it
-            // instantly left nothing to compare against when working out where the sum went wrong.
             onDigit = { d ->
-                if (wrong) {
-                    entry = d
-                    wrong = false
-                } else if (entry.length < 6) {
-                    entry += d
-                }
-            },
-            onBackspace = { entry = entry.dropLast(1); wrong = false },
-            onSubmit = {
-                val given = entry.toIntOrNull()
-                when {
-                    given == null -> wrong = true
-                    given == puzzle.answer -> {
+                val next = entry + d
+                when (puzzle.check(next)) {
+                    MathPuzzle.Verdict.CORRECT -> {
                         entry = ""
                         wrong = false
                         if (index + 1 >= puzzles.size) onSolved() else index++
                     }
-                    else -> wrong = true
+                    // Wrong answers clear straight away, with the message, so the next attempt
+                    // starts from a blank line rather than from deleting the last one.
+                    MathPuzzle.Verdict.WRONG -> {
+                        entry = ""
+                        wrong = true
+                    }
+                    MathPuzzle.Verdict.NOT_YET -> {
+                        entry = next
+                        wrong = false
+                    }
                 }
-            }
+            },
+            onBackspace = { entry = entry.dropLast(1); wrong = false },
+            onClear = { entry = ""; wrong = false }
         )
 
         Spacer(Modifier.height(12.dp))
@@ -603,13 +608,13 @@ private fun Keypad(
     onAnyKey: () -> Unit,
     onDigit: (String) -> Unit,
     onBackspace: () -> Unit,
-    onSubmit: () -> Unit
+    onClear: () -> Unit
 ) {
     val rows = listOf(
         listOf("1", "2", "3"),
         listOf("4", "5", "6"),
         listOf("7", "8", "9"),
-        listOf("back", "0", "ok")
+        listOf("back", "0", "clear")
     )
 
     Column(
@@ -622,23 +627,18 @@ private fun Keypad(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 row.forEach { key ->
-                    val isOk = key == "ok"
+                    val isClear = key == "clear"
                     val isBack = key == "back"
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .aspectRatio(1.45f)
                             .clip(RoundedCornerShape(16.dp))
-                            .background(
-                                when {
-                                    isOk -> MaterialTheme.colorScheme.primary
-                                    else -> MaterialTheme.colorScheme.surfaceVariant
-                                }
-                            )
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
                             .clickable(role = Role.Button) {
                                 onAnyKey()
                                 when {
-                                    isOk -> onSubmit()
+                                    isClear -> onClear()
                                     isBack -> onBackspace()
                                     else -> onDigit(key)
                                 }
@@ -652,10 +652,10 @@ private fun Keypad(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
 
-                            isOk -> Text(
-                                "Enter",
+                            isClear -> Text(
+                                "Clear",
                                 style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onPrimary
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
 
                             else -> Text(

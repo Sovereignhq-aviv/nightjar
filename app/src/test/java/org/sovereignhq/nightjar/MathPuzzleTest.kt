@@ -3,6 +3,7 @@ package org.sovereignhq.nightjar
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.sovereignhq.nightjar.alarm.MathPuzzle
 import org.sovereignhq.nightjar.alarm.PuzzleGenerator
 import kotlin.random.Random
 
@@ -126,4 +127,19 @@ class MathPuzzleTest {
 
     private fun operandsOf(question: String): List<Int> =
         question.split(" ").mapNotNull { it.toIntOrNull() }
+
+    @Test
+    fun theRightAnswerCountsWithoutEnter() {
+        val sum = MathPuzzle("40 + 16", 56)
+        assertEquals(MathPuzzle.Verdict.NOT_YET, sum.check("5"))
+        assertEquals(MathPuzzle.Verdict.CORRECT, sum.check("56"))
+    }
+
+    @Test
+    fun aWrongAnswerIsOnlyJudgedAtFullLength() {
+        val sum = MathPuzzle("40 + 16", 56)
+        // A wrong first digit is not flagged on its own, or you could find the answer by elimination.
+        assertEquals(MathPuzzle.Verdict.NOT_YET, sum.check("4"))
+        assertEquals(MathPuzzle.Verdict.WRONG, sum.check("46"))
+    }
 }

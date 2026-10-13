@@ -12,7 +12,21 @@ import kotlin.random.Random
  * you give up and pull the battery out. And the numbers avoid 0 and 1 as operands, which produce
  * puzzles you can answer without reading them.
  */
-data class MathPuzzle(val question: String, val answer: Int)
+data class MathPuzzle(val question: String, val answer: Int) {
+
+    enum class Verdict { CORRECT, WRONG, NOT_YET }
+
+    /**
+     * Judged as you type, with no Enter key. Right the moment the digits match; wrong only once you
+     * have typed as many digits as the answer has. Judging any earlier would turn the sum into a
+     * guessing game - type a digit, see if it survives - which defeats the point of it.
+     */
+    fun check(entry: String): Verdict = when {
+        entry == answer.toString() -> Verdict.CORRECT
+        entry.length >= answer.toString().length -> Verdict.WRONG
+        else -> Verdict.NOT_YET
+    }
+}
 
 /** How hard the puzzle is, by how many digits the operands have. Zero means no puzzle. */
 object PuzzleGenerator {
