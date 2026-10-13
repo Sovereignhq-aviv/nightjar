@@ -119,8 +119,11 @@ class Settings(context: Context) {
      * Only these numbers are kept - the photos themselves are never written anywhere.
      */
     var wakePhotoRefs: String
-        get() = prefs.getString("wake_photo_refs", "") ?: ""
-        set(v) = prefs.edit().putString("wake_photo_refs", v).apply()
+        // "_v2" since the move from MediaPipe to the TensorFlow Lite interpreter: the two prepare
+        // images differently, so embeddings from one never match the other. Old photos are dropped
+        // rather than left to fail silently every morning.
+        get() = prefs.getString("wake_photo_refs_v2", "") ?: ""
+        set(v) = prefs.edit().putString("wake_photo_refs_v2", v).remove("wake_photo_refs").apply()
 
     /** The pass mark worked out from those photos when they were taken. */
     var wakePhotoThreshold: Float

@@ -20,7 +20,8 @@ Creative Commons Attribution 4.0.
 
 | Component | Copyright | Licence |
 | --- | --- | --- |
-| MediaPipe Tasks (Audio, Vision) | Google LLC | Apache 2.0 |
+| MediaPipe Tasks (Audio) | Google LLC | Apache 2.0 |
+| TensorFlow Lite | The TensorFlow Authors | Apache 2.0 |
 | MobileNet V3 small image embedder (model) | Google LLC | Apache 2.0 |
 | CameraX | The Android Open Source Project | Apache 2.0 |
 | AndroidX Core, Activity, Lifecycle | The Android Open Source Project | Apache 2.0 |
