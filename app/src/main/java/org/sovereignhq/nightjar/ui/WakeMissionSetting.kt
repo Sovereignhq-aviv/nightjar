@@ -72,8 +72,8 @@ fun WakeMissionSetting(
     Text(
         "The alarm only switches off once you have walked somewhere and proved it: scan a barcode " +
             "that lives there, or point the camera at the place itself. The room goes silent while " +
-            "you do. If the barcode goes missing or the place looks different, three sums at your usual " +
-            "difficulty always get you out.",
+            "you do. If the barcode goes missing or the place looks different, one two-digit sum always " +
+            "gets you out.",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
