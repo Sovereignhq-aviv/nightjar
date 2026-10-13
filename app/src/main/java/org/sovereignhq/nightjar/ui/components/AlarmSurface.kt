@@ -142,12 +142,12 @@ fun AlarmSurface(
             )
 
             // The way out when the camera check cannot be done - a hotel room, a broken camera, a
-            // product that ran out. It costs a little more than your usual sums (three of them, at
-            // your own difficulty) so it is not the easy route, but no more: it used to be five
-            // three-digit sums, which punished you for the camera's failure rather than yours.
+            // product that ran out. One two-digit sum: enough to need you awake, no more. It began as
+            // five three-digit sums, then three, and both were a punishment for the camera's failure
+            // rather than yours. Walking to the check is what gets you up; this only has to exist.
             OffStep.FALLBACK -> PuzzleGate(
-                digits = if (puzzleDigits > 0) puzzleDigits else FALLBACK_DIGITS,
-                count = FALLBACK_SUMS,
+                digits = FALLBACK_DIGITS,
+                count = 1,
                 onKeyPress = onQuieten,
                 onSolved = onDismiss,
                 onGiveUp = { step = if (needsPhoto) OffStep.PHOTO else OffStep.SCAN }
@@ -217,9 +217,7 @@ fun AlarmSurface(
 
 private enum class OffStep { HOME, SCAN, PHOTO, SUMS, FALLBACK }
 
-private const val FALLBACK_SUMS = 3
-
-/** Difficulty for the fallback when no sums are set: two digits, mental arithmetic, not a test. */
+/** Two digits: mental arithmetic, not a test. */
 private const val FALLBACK_DIGITS = 2
 
 private fun describeSwitchOff(needsScan: Boolean, needsPhoto: Boolean, digits: Int, count: Int): String {
