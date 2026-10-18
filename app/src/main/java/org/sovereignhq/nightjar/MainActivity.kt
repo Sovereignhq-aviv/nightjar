@@ -3,7 +3,6 @@ package org.sovereignhq.nightjar
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -61,10 +60,12 @@ import org.sovereignhq.nightjar.service.SleepService
 import org.sovereignhq.nightjar.service.SleepState
 import org.sovereignhq.nightjar.ui.NightScreen
 import org.sovereignhq.nightjar.ui.SettingsScreen
+import org.sovereignhq.nightjar.ui.SetupScreen
 import org.sovereignhq.nightjar.ui.SleepScreen
 import org.sovereignhq.nightjar.ui.SleepViewModel
 import org.sovereignhq.nightjar.ui.SoundsScreen
 import org.sovereignhq.nightjar.ui.TrendsScreen
+import org.sovereignhq.nightjar.ui.requiredPermissions
 import org.sovereignhq.nightjar.ui.components.AlarmSurface
 import org.sovereignhq.nightjar.ui.components.DockedPlayer
 
@@ -176,6 +177,22 @@ private fun NightjarApp() {
             clipCount = clipCount,
             error = error,
             onStop = { SleepService.send(context, SleepService.ACTION_STOP) }
+        )
+        return
+    }
+
+    // A fresh install walks through setup before anything else. It ends on the Sleep tab, where
+    // the alarm it just prepared is set.
+    if (vm.needsSetup) {
+        SetupScreen(
+            vm = vm,
+            onDone = {
+                vm.finishSetup()
+                micGranted = ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED
+                tab = Tab.SLEEP
+            }
         )
         return
     }
@@ -348,10 +365,3 @@ private fun PermissionGate(onGrant: () -> Unit) {
         }
     }
 }
-
-private fun requiredPermissions(): Array<String> =
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
-    } else {
-        arrayOf(Manifest.permission.RECORD_AUDIO)
-    }

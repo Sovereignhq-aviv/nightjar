@@ -69,8 +69,26 @@ class SleepViewModel(app: Application) : AndroidViewModel(app) {
 
     val installedVersion: String get() = BuildConfig.VERSION_NAME
 
+    /**
+     * True on a fresh install until the first-run setup is finished or skipped. An install that
+     * already has nights predates the setup and skips it: its owner found everything the hard way.
+     */
+    var needsSetup by mutableStateOf(false)
+        private set
+
     init {
         refresh()
+        needsSetup = !settingsStore.setupDone && sessions.isEmpty()
+    }
+
+    fun finishSetup() {
+        settingsStore.setupDone = true
+        needsSetup = false
+    }
+
+    /** From Settings: walk through setup again, for a new phone spot or to check the fixes held. */
+    fun restartSetup() {
+        needsSetup = true
     }
 
     // ---- self update ----
