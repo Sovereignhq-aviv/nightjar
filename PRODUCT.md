@@ -8,11 +8,11 @@ because the features worth having were behind a subscription.
 
 ## Who it's for
 
-One household, on one Android phone. Not a product with users — a tool with an owner. That shapes
-every trade-off: no accounts, no onboarding funnel, no analytics, no cloud. The single exception is an
-optional update check against GitHub's public API, which exists because sideloaded apps otherwise rot
-on the phone; it is switchable off, and it is the only network use in the app. Storage decisions are
-made for one phone, and honesty about accuracy beats a confident-looking number.
+Started as a tool for one household. **Since 18 Oct 2026 it is being readied for strangers**: people
+who find it, install it, and set it up with nobody to ask. That means a first open that explains
+itself, setup steps inside the app rather than in this README, and the get-out-of-bed check in plain
+view under the alarm, because it is the reason to choose this alarm. Still no accounts, no analytics,
+no cloud. The only network use stays the optional update check against GitHub's public API.
 
 ## What people actually want from it
 
@@ -39,7 +39,7 @@ Jetpack Compose, Material 3, minSdk 27, no third-party UI or DSP dependencies.
 ## Non-goals
 
 - **Medical claims.** No sleep-apnoea detection, no diagnosis, no health-app integration.
-- **Play Store distribution.** It installs from a file. No store listing, no review process.
+- **Play Store distribution (under review, 18 Oct 2026).** It installs from a file today. A Play listing is being weighed; it would mean dropping the self-updater from that build, since Play forbids apps that install their own updates.
 - **Multi-person separation.** It cannot tell whose noise is whose in a shared bed, and does not
   pretend to.
 - **REM detection.** Not possible from a nightstand microphone. REM is folded into light sleep and
