@@ -4,8 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.media.RingtoneManager
 import android.net.Uri
-import android.os.Build
-import android.os.PowerManager
 import android.provider.OpenableColumns
 import android.provider.Settings as AndroidSettings
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -45,8 +43,6 @@ import org.sovereignhq.nightjar.audio.AudioSetLabels
 import org.sovereignhq.nightjar.data.EventKind
 import org.sovereignhq.nightjar.data.Sensitivity
 import org.sovereignhq.nightjar.alarm.PuzzleGenerator
-import org.sovereignhq.nightjar.service.AlarmScheduler
-import org.sovereignhq.nightjar.service.Notifications
 import org.sovereignhq.nightjar.service.SleepService
 import org.sovereignhq.nightjar.ui.components.HairLine
 import org.sovereignhq.nightjar.ui.components.UpdateCard
@@ -514,9 +510,7 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
         // ---------------------------------------------------------- reliability
         SectionLabel("Keeping it reliable")
         NightCard {
-            val powerManager = context.getSystemService(PowerManager::class.java)
-            val unrestricted =
-                powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
+            val unrestricted = Reliability.batteryUnrestricted(context)
 
             StatusRow(
                 title = "Battery use unrestricted",
@@ -526,20 +520,14 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
                 } else {
                     "Android may shut Nightjar down mid-night. Tap to fix."
                 },
-                onClick = {
-                    runCatching {
-                        context.startActivity(
-                            Intent(AndroidSettings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                        )
-                    }
-                }
+                onClick = { Reliability.openBatterySettings(context) }
             )
 
             Spacer(Modifier.height(14.dp))
             HairLine()
             Spacer(Modifier.height(14.dp))
 
-            val exact = AlarmScheduler.canScheduleExact(context)
+            val exact = Reliability.exactAlarmsAllowed(context)
             StatusRow(
                 title = "Exact alarms allowed",
                 ok = exact,
@@ -548,23 +536,14 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
                 } else {
                     "Without this the alarm can be delayed. Tap to fix."
                 },
-                onClick = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        runCatching {
-                            context.startActivity(
-                                Intent(AndroidSettings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
-                                    .setData(Uri.parse("package:${context.packageName}"))
-                            )
-                        }
-                    }
-                }
+                onClick = { Reliability.openExactAlarmSettings(context) }
             )
 
             Spacer(Modifier.height(14.dp))
             HairLine()
             Spacer(Modifier.height(14.dp))
 
-            val canShowAlarmScreen = Notifications.canShowFullScreenAlarm(context)
+            val canShowAlarmScreen = Reliability.wakeScreenAllowed(context)
             StatusRow(
                 title = "Wake-up screen allowed",
                 ok = canShowAlarmScreen,
@@ -574,16 +553,7 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
                     "Android is blocking the wake-up screen, so the alarm can only be stopped from " +
                         "the notification shade. Tap to allow it."
                 },
-                onClick = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                        runCatching {
-                            context.startActivity(
-                                Intent(AndroidSettings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT)
-                                    .setData(Uri.parse("package:${context.packageName}"))
-                            )
-                        }
-                    }
-                }
+                onClick = { Reliability.openWakeScreenSettings(context) }
             )
 
             Spacer(Modifier.height(14.dp))
@@ -711,7 +681,7 @@ private fun SliderRow(
 }
 
 @Composable
-private fun StatusRow(title: String, ok: Boolean, detail: String, onClick: () -> Unit) {
+internal fun StatusRow(title: String, ok: Boolean, detail: String, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()

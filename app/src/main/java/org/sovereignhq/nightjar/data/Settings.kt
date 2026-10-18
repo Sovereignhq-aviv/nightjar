@@ -179,6 +179,11 @@ class Settings(context: Context) {
         get() = prefs.getBoolean("auto_update_check", true)
         set(v) = prefs.edit().putBoolean("auto_update_check", v).apply()
 
+    /** Set once the first-run setup is finished or skipped, so it never comes back. */
+    var setupDone: Boolean
+        get() = prefs.getBoolean("setup_done", false)
+        set(v) = prefs.edit().putBoolean("setup_done", v).apply()
+
     /** Rate-limits the check to a few times a day rather than every time the app opens. */
     var lastUpdateCheckMs: Long
         get() = prefs.getLong("last_update_check", 0L)

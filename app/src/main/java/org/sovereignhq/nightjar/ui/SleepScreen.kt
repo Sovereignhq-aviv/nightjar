@@ -1,7 +1,6 @@
 package org.sovereignhq.nightjar.ui
 
 import android.content.Context
-import android.os.PowerManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -43,8 +42,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import org.sovereignhq.nightjar.data.ALL_TAGS
 import org.sovereignhq.nightjar.data.SleepSession
-import org.sovereignhq.nightjar.service.AlarmScheduler
-import org.sovereignhq.nightjar.service.Notifications
 import org.sovereignhq.nightjar.ui.components.TimeWheel
 import org.sovereignhq.nightjar.ui.components.EmptyState
 import org.sovereignhq.nightjar.ui.components.Hypnogram
@@ -485,10 +482,9 @@ private fun SilentNightReport(diagnostics: String) {
  */
 @Composable
 private fun ReliabilityWarnings(context: Context) {
-    val powerManager = context.getSystemService(PowerManager::class.java)
-    val batteryUnrestricted = powerManager?.isIgnoringBatteryOptimizations(context.packageName) == true
-    val exactAlarms = AlarmScheduler.canScheduleExact(context)
-    val alarmScreenAllowed = Notifications.canShowFullScreenAlarm(context)
+    val batteryUnrestricted = Reliability.batteryUnrestricted(context)
+    val exactAlarms = Reliability.exactAlarmsAllowed(context)
+    val alarmScreenAllowed = Reliability.wakeScreenAllowed(context)
     if (batteryUnrestricted && exactAlarms && alarmScreenAllowed) return
 
     Column(
