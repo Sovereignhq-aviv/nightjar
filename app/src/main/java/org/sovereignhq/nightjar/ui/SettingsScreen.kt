@@ -584,6 +584,21 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
                 }
                 Text("Open", color = MaterialTheme.colorScheme.primary)
             }
+
+            Spacer(Modifier.height(14.dp))
+            HairLine()
+            Spacer(Modifier.height(14.dp))
+
+            OutlinedButton(
+                onClick = { vm.restartSetup() },
+                modifier = Modifier.fillMaxWidth().height(48.dp)
+            ) { Text("Run the setup again") }
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "The four first-run steps: permissions, battery, microphone check, wake-up spot.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
 
         // --------------------------------------------------------------- honesty

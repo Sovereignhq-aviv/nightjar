@@ -86,6 +86,11 @@ class SleepViewModel(app: Application) : AndroidViewModel(app) {
         needsSetup = false
     }
 
+    /** From Settings: walk through setup again, for a new phone spot or to check the fixes held. */
+    fun restartSetup() {
+        needsSetup = true
+    }
+
     // ---- self update ----
 
     /**
