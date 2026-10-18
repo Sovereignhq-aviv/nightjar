@@ -16,8 +16,8 @@ android {
         minSdk = 27
         targetSdk = 35
         // Bumped on every release. The updater compares versionName against the release tag.
-        versionCode = 10
-        versionName = "1.4.3"
+        versionCode = 11
+        versionName = "1.5.0"
 
         // 64-bit ARM only. MediaPipe ships native code for four processor types and every phone sold
         // in years uses this one; the other three were half the download for no one. An older

@@ -155,6 +155,25 @@ fun SleepScreen(
             }
         }
 
+        // The feature that sets this alarm apart, so it sits right under the time it applies to
+        // rather than at the bottom of Settings. One check at a time: registering either clears
+        // the other.
+        if (settings.alarmEnabled) {
+            NightCard {
+                WakeMissionSetting(
+                    wakeCode = settings.wakeCode,
+                    wakePhotoRefs = settings.wakePhotoRefs,
+                    onCode = { code -> vm.updateSettings { copy(wakeCode = code, wakePhotoRefs = "") } },
+                    onPhoto = { refs, threshold ->
+                        vm.updateSettings {
+                            copy(wakePhotoRefs = refs, wakePhotoThreshold = threshold, wakeCode = "")
+                        }
+                    },
+                    onOff = { vm.updateSettings { copy(wakeCode = "", wakePhotoRefs = "") } }
+                )
+            }
+        }
+
         Button(
             onClick = onStartNight,
             modifier = Modifier

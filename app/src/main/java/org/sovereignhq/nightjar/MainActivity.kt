@@ -92,7 +92,10 @@ private fun NightjarApp() {
     val scope = rememberCoroutineScope()
     val snackbars = remember { SnackbarHostState() }
 
-    var tab by remember { mutableStateOf(Tab.SOUNDS) }
+    // Recordings are the morning's first stop, but before the first night there are none, and an
+    // empty list tells a newcomer nothing. Open on Tonight instead, where the alarm and the
+    // get-out-of-bed check are set up.
+    var tab by remember { mutableStateOf(if (vm.sessions.isEmpty()) Tab.SLEEP else Tab.SOUNDS) }
     var micGranted by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==

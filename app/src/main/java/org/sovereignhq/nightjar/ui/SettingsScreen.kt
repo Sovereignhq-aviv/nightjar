@@ -423,21 +423,14 @@ fun SettingsScreen(vm: SleepViewModel, modifier: Modifier = Modifier) {
                 )
             }
 
-            Spacer(Modifier.height(18.dp))
-            HairLine()
-            Spacer(Modifier.height(16.dp))
-
-            // One check at a time: registering either clears the other.
-            WakeMissionSetting(
-                wakeCode = settings.wakeCode,
-                wakePhotoRefs = settings.wakePhotoRefs,
-                onCode = { code -> vm.updateSettings { copy(wakeCode = code, wakePhotoRefs = "") } },
-                onPhoto = { refs, threshold ->
-                    vm.updateSettings {
-                        copy(wakePhotoRefs = refs, wakePhotoThreshold = threshold, wakeCode = "")
-                    }
-                },
-                onOff = { vm.updateSettings { copy(wakeCode = "", wakePhotoRefs = "") } }
+            Spacer(Modifier.height(10.dp))
+            // The get-out-of-bed check used to live here, below everything else, and nobody found
+            // it. It is the reason to pick this alarm over any other, so it now sits on the Sleep
+            // tab right under the alarm time.
+            Text(
+                "The get-out-of-bed check is on the Sleep tab, right under your alarm.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             Spacer(Modifier.height(18.dp))

@@ -41,7 +41,8 @@ import org.sovereignhq.nightjar.ui.components.PlaceCamera
 import org.sovereignhq.nightjar.ui.components.SectionLabel
 import org.sovereignhq.nightjar.ui.components.hasCameraPermission
 
-private enum class Mission(val label: String) { OFF("Off"), CODE("Barcode"), PHOTO("Photo") }
+// Photo first: it needs nothing but the place itself, while a barcode can run out or move.
+private enum class Mission(val label: String) { PHOTO("Photo"), CODE("Barcode"), OFF("Off") }
 
 /**
  * What you have to do, away from the bed, before the alarm will switch off: scan a barcode, or point
@@ -64,16 +65,20 @@ fun WakeMissionSetting(
         wakeCode.isNotBlank() -> Mission.CODE
         else -> Mission.OFF
     }
-    var shown by remember(registered) { mutableStateOf(registered) }
+    // With nothing registered, open on the photo setup rather than on "Off": an empty choice
+    // hides the feature behind a tap, and this is the feature people pick the app for.
+    var shown by remember(registered) {
+        mutableStateOf(if (registered == Mission.OFF) Mission.PHOTO else registered)
+    }
     var confirmingOff by remember { mutableStateOf(false) }
 
     SectionLabel("Get out of bed to switch it off")
     Spacer(Modifier.height(6.dp))
     Text(
-        "The alarm only switches off once you have walked somewhere and proved it: scan a barcode " +
-            "that lives there, or point the camera at the place itself. The room goes silent while " +
-            "you do. If the barcode goes missing or the place looks different, one two-digit sum always " +
-            "gets you out.",
+        "Take three photos of a spot away from the bed, like the bathroom sink. In the morning " +
+            "the alarm only switches off once you walk there and point the camera at it. The room " +
+            "goes silent while you do. A barcode works too. If the spot looks different one day, " +
+            "one two-digit sum always gets you out.",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
