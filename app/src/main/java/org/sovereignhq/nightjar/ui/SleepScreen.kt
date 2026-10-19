@@ -161,6 +161,7 @@ fun SleepScreen(
                     wakeCode = settings.wakeCode,
                     wakePhotoRefs = settings.wakePhotoRefs,
                     wakeDance = settings.wakeDance,
+                    wakeWorkout = settings.wakeWorkout,
                     onCode = { code -> vm.updateSettings { copy(wakeCode = code, wakePhotoRefs = "", wakeDance = false) } },
                     onPhoto = { refs, threshold ->
                         vm.updateSettings {
@@ -168,6 +169,7 @@ fun SleepScreen(
                         }
                     },
                     onDance = { vm.updateSettings { copy(wakeDance = true, wakeCode = "", wakePhotoRefs = "") } },
+                    onWorkout = { on -> vm.updateSettings { copy(wakeWorkout = on) } },
                     onOff = { vm.updateSettings { copy(wakeCode = "", wakePhotoRefs = "", wakeDance = false) } }
                 )
             }

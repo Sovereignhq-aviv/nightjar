@@ -56,6 +56,7 @@ class AlarmActivity : ComponentActivity() {
         val wakePhotoRefs = settings.wakePhotoRefs
         val wakePhotoThreshold = settings.wakePhotoThreshold
         val wakeDance = settings.wakeDance
+        val wakeWorkout = settings.wakeWorkout
 
         setContent {
             NightjarTheme {
@@ -78,6 +79,7 @@ class AlarmActivity : ComponentActivity() {
                     wakePhotoRefs = wakePhotoRefs,
                     wakePhotoThreshold = wakePhotoThreshold,
                     wakeDance = wakeDance,
+                    wakeWorkout = wakeWorkout,
                     quietUntilMs = quietUntil,
                     onQuieten = { SleepService.send(this, SleepService.ACTION_QUIET) },
                     onSnooze = {

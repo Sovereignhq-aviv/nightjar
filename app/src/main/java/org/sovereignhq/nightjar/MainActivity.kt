@@ -152,6 +152,7 @@ private fun NightjarApp() {
             wakePhotoRefs = vm.settings.wakePhotoRefs,
             wakePhotoThreshold = vm.settings.wakePhotoThreshold,
             wakeDance = vm.settings.wakeDance,
+            wakeWorkout = vm.settings.wakeWorkout,
             quietUntilMs = alarmQuietUntil,
             onQuieten = { SleepService.send(context, SleepService.ACTION_QUIET) },
             onSnooze = { SleepService.send(context, SleepService.ACTION_SNOOZE) },
