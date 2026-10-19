@@ -125,6 +125,11 @@ class Settings(context: Context) {
         get() = prefs.getString("wake_photo_refs_v2", "") ?: ""
         set(v) = prefs.edit().putString("wake_photo_refs_v2", v).remove("wake_photo_refs").apply()
 
+    /** Switching the alarm off needs a few dance moves in front of the camera. */
+    var wakeDance: Boolean
+        get() = prefs.getBoolean("wake_dance", false)
+        set(v) = prefs.edit().putBoolean("wake_dance", v).apply()
+
     /** The pass mark worked out from those photos when they were taken. */
     var wakePhotoThreshold: Float
         get() = prefs.getFloat("wake_photo_threshold", 0.8f)
@@ -229,6 +234,7 @@ class Settings(context: Context) {
         wakeCode = wakeCode,
         wakePhotoRefs = wakePhotoRefs,
         wakePhotoThreshold = wakePhotoThreshold,
+        wakeDance = wakeDance,
         alarmSoundUri = alarmSoundUri,
         alarmSoundLabel = alarmSoundLabel,
         mutedLabels = mutedLabels,
@@ -262,6 +268,7 @@ data class SettingsSnapshot(
     val wakeCode: String,
     val wakePhotoRefs: String,
     val wakePhotoThreshold: Float,
+    val wakeDance: Boolean,
     val alarmSoundUri: String,
     val alarmSoundLabel: String,
     val mutedLabels: Set<String>,
@@ -286,6 +293,7 @@ data class SettingsSnapshot(
         settings.wakeCode = wakeCode
         settings.wakePhotoRefs = wakePhotoRefs
         settings.wakePhotoThreshold = wakePhotoThreshold
+        settings.wakeDance = wakeDance
         settings.alarmSoundUri = alarmSoundUri
         settings.alarmSoundLabel = alarmSoundLabel
         settings.mutedLabels = mutedLabels

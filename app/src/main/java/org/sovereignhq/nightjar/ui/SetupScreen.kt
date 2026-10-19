@@ -265,16 +265,19 @@ private fun SpotStep(vm: SleepViewModel, onFinish: () -> Unit) {
         WakeMissionSetting(
             wakeCode = settings.wakeCode,
             wakePhotoRefs = settings.wakePhotoRefs,
-            onCode = { code -> vm.updateSettings { copy(wakeCode = code, wakePhotoRefs = "") } },
+            wakeDance = settings.wakeDance,
+            onCode = { code -> vm.updateSettings { copy(wakeCode = code, wakePhotoRefs = "", wakeDance = false) } },
             onPhoto = { refs, threshold ->
                 vm.updateSettings {
-                    copy(wakePhotoRefs = refs, wakePhotoThreshold = threshold, wakeCode = "")
+                    copy(wakePhotoRefs = refs, wakePhotoThreshold = threshold, wakeCode = "", wakeDance = false)
                 }
             },
-            onOff = { vm.updateSettings { copy(wakeCode = "", wakePhotoRefs = "") } }
+            onDance = { vm.updateSettings { copy(wakeDance = true, wakeCode = "", wakePhotoRefs = "") } },
+            onOff = { vm.updateSettings { copy(wakeCode = "", wakePhotoRefs = "", wakeDance = false) } }
         )
     }
-    val registered = settings.wakePhotoRefs.isNotBlank() || settings.wakeCode.isNotBlank()
+    val registered = settings.wakePhotoRefs.isNotBlank() || settings.wakeCode.isNotBlank() ||
+        settings.wakeDance
     PrimaryButton(if (registered) "Finish" else "Finish without a spot", onFinish)
 }
 

@@ -78,6 +78,13 @@ jobs:
           curl -fsSL -o app/src/main/assets/mobilenet_v3_small.tflite https://storage.googleapis.com/mediapipe-models/image_embedder/mobilenet_v3_small/float32/1/mobilenet_v3_small.tflite
           ls -l app/src/main/assets/mobilenet_v3_small.tflite
 
+      # MoveNet Lightning (Apache 2.0), for the dance check. TF Hub redirects to Kaggle's storage,
+      # hence -L.
+      - name: Fetch the pose model
+        run: |
+          curl -fsSL -o app/src/main/assets/movenet_lightning.tflite "https://tfhub.dev/google/lite-model/movenet/singlepose/lightning/tflite/float16/4?lite-format=tflite"
+          ls -l app/src/main/assets/movenet_lightning.tflite
+
       # Pinned rather than using whatever Gradle the runner ships, because Android Gradle Plugin 8.7
       # is only compatible with a known Gradle range.
       - name: Set up Gradle 8.9

@@ -37,16 +37,20 @@ import org.sovereignhq.nightjar.alarm.PlaceEmbedder
 import org.sovereignhq.nightjar.alarm.PlaceMatch
 import org.sovereignhq.nightjar.alarm.WakeCode
 import org.sovereignhq.nightjar.ui.components.CodeScanner
+import org.sovereignhq.nightjar.ui.components.DanceRoutine
 import org.sovereignhq.nightjar.ui.components.PlaceCamera
 import org.sovereignhq.nightjar.ui.components.SectionLabel
 import org.sovereignhq.nightjar.ui.components.hasCameraPermission
 
 // Photo first: it needs nothing but the place itself, while a barcode can run out or move.
-private enum class Mission(val label: String) { PHOTO("Photo"), CODE("Barcode"), OFF("Off") }
+private enum class Mission(val label: String) {
+    PHOTO("Photo"), CODE("Barcode"), DANCE("Dance"), OFF("Off")
+}
 
 /**
- * What you have to do, away from the bed, before the alarm will switch off: scan a barcode, or point
- * the camera at a place. One or the other - two checks in a row would just be a longer walk.
+ * What you have to do, away from the bed, before the alarm will switch off: point the camera at a
+ * place, scan a barcode, or dance a few moves in front of it. One at a time - two checks in a row
+ * would just be a longer morning.
  *
  * Registering is the moment to ask for the camera, while the app is open and in your hand. Asking at
  * the alarm itself would put a permission dialog in front of someone half asleep, over a lock screen
@@ -56,13 +60,16 @@ private enum class Mission(val label: String) { PHOTO("Photo"), CODE("Barcode"),
 fun WakeMissionSetting(
     wakeCode: String,
     wakePhotoRefs: String,
+    wakeDance: Boolean,
     onCode: (String) -> Unit,
     onPhoto: (refs: String, threshold: Float) -> Unit,
+    onDance: () -> Unit,
     onOff: () -> Unit
 ) {
     val registered = when {
         wakePhotoRefs.isNotBlank() -> Mission.PHOTO
         wakeCode.isNotBlank() -> Mission.CODE
+        wakeDance -> Mission.DANCE
         else -> Mission.OFF
     }
     // With nothing registered, open on the photo setup rather than on "Off": an empty choice
@@ -77,8 +84,8 @@ fun WakeMissionSetting(
     Text(
         "Take three photos of a spot away from the bed, like the bathroom sink. In the morning " +
             "the alarm only switches off once you walk there and point the camera at it. The room " +
-            "goes silent while you do. A barcode works too. If the spot looks different one day, " +
-            "one two-digit sum always gets you out.",
+            "goes silent while you do. A barcode or a short dance works too. If the check fails " +
+            "one day, one two-digit sum always gets you out.",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
@@ -117,6 +124,7 @@ fun WakeMissionSetting(
         Mission.OFF -> Unit
         Mission.CODE -> CodeMission(wakeCode = wakeCode, onChange = onCode)
         Mission.PHOTO -> PhotoMission(registered = wakePhotoRefs, onRegistered = onPhoto)
+        Mission.DANCE -> DanceMission(chosen = wakeDance, onChoose = onDance)
     }
 
     if (registered != Mission.OFF && shown != registered && shown != Mission.OFF) {
@@ -413,6 +421,72 @@ private fun PhotoMission(registered: String, onRegistered: (refs: String, thresh
                 onClick = openCamera,
                 modifier = Modifier.fillMaxWidth().height(48.dp)
             ) { Text("Take 3 photos") }
+        }
+    }
+
+    if (refused) CameraRefused()
+}
+
+/**
+ * Nothing to register: the moves are picked fresh each morning. The camera permission is asked for
+ * here, and Try it shows whether the phone can see you from where it will stand.
+ */
+@Composable
+private fun DanceMission(chosen: Boolean, onChoose: () -> Unit) {
+    var trying by remember { mutableStateOf(false) }
+    var passed by remember { mutableStateOf(false) }
+    val (openCamera, refused) = rememberCameraGate { trying = true; passed = false }
+
+    Text(
+        "Three moves, picked at random each morning - hands up, arms out, one hand up, hands on " +
+            "hips - copied in front of the selfie camera. Prop the phone on a shelf or chest of " +
+            "drawers and step back until your hands and hips are in view. Nothing is recorded.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    Spacer(Modifier.height(8.dp))
+
+    when {
+        trying -> {
+            DanceRoutine(
+                onDone = { trying = false; passed = true },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = { trying = false },
+                modifier = Modifier.fillMaxWidth().height(48.dp)
+            ) { Text("Stop") }
+        }
+
+        else -> {
+            if (passed) {
+                Text(
+                    "All three moves seen. This is what switches the alarm off.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                Spacer(Modifier.height(8.dp))
+            } else if (chosen) {
+                Text(
+                    "The dance switches the alarm off.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(
+                    onClick = openCamera,
+                    modifier = Modifier.weight(1f).height(48.dp)
+                ) { Text("Try it") }
+                if (!chosen) {
+                    Button(
+                        onClick = onChoose,
+                        modifier = Modifier.weight(1f).height(48.dp)
+                    ) { Text("Use the dance") }
+                }
+            }
         }
     }
 
