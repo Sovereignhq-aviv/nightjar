@@ -6,7 +6,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.sovereignhq.nightjar.alarm.DanceMove
 import org.sovereignhq.nightjar.alarm.DancePose
+import org.sovereignhq.nightjar.alarm.Exercise
 import org.sovereignhq.nightjar.alarm.Keypoint
+import org.sovereignhq.nightjar.alarm.RepCounter
 import kotlin.random.Random
 
 /**
@@ -87,5 +89,46 @@ class DancePoseTest {
         val routine = DancePose.routine(3, Random(7))
         assertEquals(3, routine.size)
         assertEquals(3, routine.toSet().size)
+    }
+
+    private fun withKnees(base: List<Keypoint>, kneeY: Float): List<Keypoint> =
+        base.toMutableList().also {
+            it[13] = Keypoint(230f, kneeY, 0.9f)
+            it[14] = Keypoint(170f, kneeY, 0.9f)
+        }
+
+    @Test
+    fun jumpingJacksCountEachUpAndDown() {
+        val counter = RepCounter(Exercise.JUMPING_JACKS)
+        val sequence = listOf(hangingDown, handsUp, handsUp, hangingDown, armsOut, handsUp, hangingDown)
+        sequence.forEach { counter.feed(it) }
+        assertEquals(2, counter.reps)
+    }
+
+    @Test
+    fun goingUpWithoutComingDownIsNotARep() {
+        val counter = RepCounter(Exercise.JUMPING_JACKS)
+        listOf(hangingDown, handsUp, handsUp, handsUp).forEach { counter.feed(it) }
+        assertEquals(0, counter.reps)
+    }
+
+    @Test
+    fun squatsCountDownAndBackUp() {
+        // Hips at y=380; standing knees 130px lower (1.3 shoulder widths), squatting knees level.
+        val standing = withKnees(hangingDown, 510f)
+        val squatting = withKnees(hangingDown, 400f)
+        val counter = RepCounter(Exercise.SQUATS)
+        listOf(standing, squatting, standing, squatting, squatting, standing).forEach { counter.feed(it) }
+        assertEquals(2, counter.reps)
+    }
+
+    @Test
+    fun squatsNeedTheKneesInView() {
+        val noKnees = hangingDown.toMutableList().also {
+            it[13] = Keypoint(230f, 400f, 0.1f)
+            it[14] = Keypoint(170f, 400f, 0.1f)
+        }
+        assertFalse(DancePose.squatting(noKnees))
+        assertFalse(DancePose.standing(noKnees))
     }
 }

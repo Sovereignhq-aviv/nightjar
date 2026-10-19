@@ -86,6 +86,7 @@ fun AlarmSurface(
     wakePhotoRefs: String,
     wakePhotoThreshold: Float,
     wakeDance: Boolean,
+    wakeWorkout: Boolean,
     quietUntilMs: Long,
     onQuieten: () -> Unit,
     onSnooze: () -> Unit,
@@ -136,6 +137,7 @@ fun AlarmSurface(
             )
 
             OffStep.DANCE -> DanceGate(
+                workout = wakeWorkout,
                 quietUntilMs = quietUntilMs,
                 onQuieten = onQuieten,
                 onDanced = afterScan,
@@ -180,7 +182,9 @@ fun AlarmSurface(
 
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    text = describeSwitchOff(needsScan, needsPhoto, needsDance, puzzleDigits, puzzleCount),
+                    text = describeSwitchOff(
+                        needsScan, needsPhoto, needsDance, wakeWorkout, puzzleDigits, puzzleCount
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -241,6 +245,7 @@ private fun describeSwitchOff(
     needsScan: Boolean,
     needsPhoto: Boolean,
     needsDance: Boolean,
+    workout: Boolean,
     digits: Int,
     count: Int
 ): String {
@@ -248,6 +253,7 @@ private fun describeSwitchOff(
     val away = when {
         needsPhoto -> "the camera pointed at your place"
         needsScan -> "your wake code scanned"
+        needsDance && workout -> "8 jumping jacks and 5 squats in front of the camera"
         needsDance -> "three dance moves in front of the camera"
         else -> null
     }
@@ -456,6 +462,7 @@ private const val MATCH_FRAMES = 3
  */
 @Composable
 private fun DanceGate(
+    workout: Boolean,
     quietUntilMs: Long,
     onQuieten: () -> Unit,
     onDanced: () -> Unit,
@@ -467,7 +474,11 @@ private fun DanceGate(
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         if (cameraAllowed) {
-            DanceRoutine(onDone = onDanced, onProgress = onQuieten, modifier = Modifier.fillMaxWidth())
+            if (workout) {
+                WorkoutRoutine(onDone = onDanced, onProgress = onQuieten, modifier = Modifier.fillMaxWidth())
+            } else {
+                DanceRoutine(onDone = onDanced, onProgress = onQuieten, modifier = Modifier.fillMaxWidth())
+            }
         } else {
             Text(
                 "Nightjar is not allowed to use the camera any more, so it cannot see the dance. " +
@@ -490,7 +501,7 @@ private fun DanceGate(
             shape = RoundedCornerShape(18.dp)
         ) {
             Text(
-                "Can't dance now? Do a sum instead",
+                if (workout) "Can't do it now? Do a sum instead" else "Can't dance now? Do a sum instead",
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

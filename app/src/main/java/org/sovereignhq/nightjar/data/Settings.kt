@@ -130,6 +130,11 @@ class Settings(context: Context) {
         get() = prefs.getBoolean("wake_dance", false)
         set(v) = prefs.edit().putBoolean("wake_dance", v).apply()
 
+    /** With [wakeDance] on: jumping jacks and squats instead of dance moves. */
+    var wakeWorkout: Boolean
+        get() = prefs.getBoolean("wake_workout", false)
+        set(v) = prefs.edit().putBoolean("wake_workout", v).apply()
+
     /** The pass mark worked out from those photos when they were taken. */
     var wakePhotoThreshold: Float
         get() = prefs.getFloat("wake_photo_threshold", 0.8f)
@@ -235,6 +240,7 @@ class Settings(context: Context) {
         wakePhotoRefs = wakePhotoRefs,
         wakePhotoThreshold = wakePhotoThreshold,
         wakeDance = wakeDance,
+        wakeWorkout = wakeWorkout,
         alarmSoundUri = alarmSoundUri,
         alarmSoundLabel = alarmSoundLabel,
         mutedLabels = mutedLabels,
@@ -269,6 +275,7 @@ data class SettingsSnapshot(
     val wakePhotoRefs: String,
     val wakePhotoThreshold: Float,
     val wakeDance: Boolean,
+    val wakeWorkout: Boolean,
     val alarmSoundUri: String,
     val alarmSoundLabel: String,
     val mutedLabels: Set<String>,
@@ -294,6 +301,7 @@ data class SettingsSnapshot(
         settings.wakePhotoRefs = wakePhotoRefs
         settings.wakePhotoThreshold = wakePhotoThreshold
         settings.wakeDance = wakeDance
+        settings.wakeWorkout = wakeWorkout
         settings.alarmSoundUri = alarmSoundUri
         settings.alarmSoundLabel = alarmSoundLabel
         settings.mutedLabels = mutedLabels

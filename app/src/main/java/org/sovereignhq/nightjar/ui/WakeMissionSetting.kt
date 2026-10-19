@@ -40,16 +40,17 @@ import org.sovereignhq.nightjar.ui.components.CodeScanner
 import org.sovereignhq.nightjar.ui.components.DanceRoutine
 import org.sovereignhq.nightjar.ui.components.PlaceCamera
 import org.sovereignhq.nightjar.ui.components.SectionLabel
+import org.sovereignhq.nightjar.ui.components.WorkoutRoutine
 import org.sovereignhq.nightjar.ui.components.hasCameraPermission
 
 // Photo first: it needs nothing but the place itself, while a barcode can run out or move.
 private enum class Mission(val label: String) {
-    PHOTO("Photo"), CODE("Barcode"), DANCE("Dance"), OFF("Off")
+    PHOTO("Photo"), CODE("Barcode"), DANCE("Moves"), OFF("Off")
 }
 
 /**
  * What you have to do, away from the bed, before the alarm will switch off: point the camera at a
- * place, scan a barcode, or dance a few moves in front of it. One at a time - two checks in a row
+ * place, scan a barcode, or move in front of it - a few dance moves or a short workout. One at a time - two checks in a row
  * would just be a longer morning.
  *
  * Registering is the moment to ask for the camera, while the app is open and in your hand. Asking at
@@ -61,9 +62,11 @@ fun WakeMissionSetting(
     wakeCode: String,
     wakePhotoRefs: String,
     wakeDance: Boolean,
+    wakeWorkout: Boolean,
     onCode: (String) -> Unit,
     onPhoto: (refs: String, threshold: Float) -> Unit,
     onDance: () -> Unit,
+    onWorkout: (Boolean) -> Unit,
     onOff: () -> Unit
 ) {
     val registered = when {
@@ -84,7 +87,7 @@ fun WakeMissionSetting(
     Text(
         "Take three photos of a spot away from the bed, like the bathroom sink. In the morning " +
             "the alarm only switches off once you walk there and point the camera at it. The room " +
-            "goes silent while you do. A barcode or a short dance works too. If the check fails " +
+            "goes silent while you do. A barcode, a short dance or a quick workout works too. If the check fails " +
             "one day, one two-digit sum always gets you out.",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -124,7 +127,12 @@ fun WakeMissionSetting(
         Mission.OFF -> Unit
         Mission.CODE -> CodeMission(wakeCode = wakeCode, onChange = onCode)
         Mission.PHOTO -> PhotoMission(registered = wakePhotoRefs, onRegistered = onPhoto)
-        Mission.DANCE -> DanceMission(chosen = wakeDance, onChoose = onDance)
+        Mission.DANCE -> MovesMission(
+            chosen = wakeDance,
+            workout = wakeWorkout,
+            onChoose = onDance,
+            onWorkout = onWorkout
+        )
     }
 
     if (registered != Mission.OFF && shown != registered && shown != Mission.OFF) {
@@ -428,19 +436,60 @@ private fun PhotoMission(registered: String, onRegistered: (refs: String, thresh
 }
 
 /**
- * Nothing to register: the moves are picked fresh each morning. The camera permission is asked for
- * here, and Try it shows whether the phone can see you from where it will stand.
+ * Nothing to register: the moves are picked fresh each morning. Two styles - dance moves, or jumping
+ * jacks and squats for anyone who would rather not dance. The camera permission is asked for here,
+ * and Try it shows whether the phone can see you from where it will stand.
  */
 @Composable
-private fun DanceMission(chosen: Boolean, onChoose: () -> Unit) {
+private fun MovesMission(
+    chosen: Boolean,
+    workout: Boolean,
+    onChoose: () -> Unit,
+    onWorkout: (Boolean) -> Unit
+) {
     var trying by remember { mutableStateOf(false) }
     var passed by remember { mutableStateOf(false) }
     val (openCamera, refused) = rememberCameraGate { trying = true; passed = false }
 
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(false to "Dance", true to "Workout").forEach { (isWorkout, label) ->
+            val selected = workout == isWorkout
+            Box(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        if (selected) MaterialTheme.colorScheme.secondaryContainer
+                        else MaterialTheme.colorScheme.surfaceVariant
+                    )
+                    .clickable(role = Role.RadioButton) {
+                        onWorkout(isWorkout)
+                        passed = false
+                    }
+                    .padding(vertical = 14.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+    Spacer(Modifier.height(8.dp))
+
     Text(
-        "Three moves, picked at random each morning - hands up, arms out, one hand up, hands on " +
-            "hips - copied in front of the selfie camera. Prop the phone on a shelf or chest of " +
-            "drawers and step back until your hands and hips are in view. Nothing is recorded.",
+        if (workout) {
+            "8 jumping jacks, then 5 squats, counted by the selfie camera. Only your arms are " +
+                "judged for the jumping jacks, so a quiet step-out version counts too. Prop the " +
+                "phone on a shelf and step back until your knees are in view. Nothing is recorded."
+        } else {
+            "Three moves, picked at random each morning - hands up, arms out, one hand up, hands " +
+                "on hips - copied in front of the selfie camera. Prop the phone on a shelf or chest " +
+                "of drawers and step back until your hands and hips are in view. Nothing is recorded."
+        },
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
@@ -448,10 +497,17 @@ private fun DanceMission(chosen: Boolean, onChoose: () -> Unit) {
 
     when {
         trying -> {
-            DanceRoutine(
-                onDone = { trying = false; passed = true },
-                modifier = Modifier.fillMaxWidth()
-            )
+            if (workout) {
+                WorkoutRoutine(
+                    onDone = { trying = false; passed = true },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else {
+                DanceRoutine(
+                    onDone = { trying = false; passed = true },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
             Spacer(Modifier.height(8.dp))
             OutlinedButton(
                 onClick = { trying = false },
@@ -462,14 +518,14 @@ private fun DanceMission(chosen: Boolean, onChoose: () -> Unit) {
         else -> {
             if (passed) {
                 Text(
-                    "All three moves seen. This is what switches the alarm off.",
+                    "All done and seen. This is what switches the alarm off.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.secondary
                 )
                 Spacer(Modifier.height(8.dp))
             } else if (chosen) {
                 Text(
-                    "The dance switches the alarm off.",
+                    if (workout) "The workout switches the alarm off." else "The dance switches the alarm off.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -484,7 +540,7 @@ private fun DanceMission(chosen: Boolean, onChoose: () -> Unit) {
                     Button(
                         onClick = onChoose,
                         modifier = Modifier.weight(1f).height(48.dp)
-                    ) { Text("Use the dance") }
+                    ) { Text(if (workout) "Use the workout" else "Use the dance") }
                 }
             }
         }
