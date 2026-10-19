@@ -29,10 +29,15 @@ import java.util.concurrent.Executors
  * than a decoded string. Frames are kept small (about 640x480) and rare: the embedding model shrinks
  * them to 224 pixels anyway, and comparing more often than this only warms the phone.
  *
- * [onFrame] runs on a background thread.
+ * [onFrame] runs on a background thread. [front] picks the selfie camera, for the dance check.
  */
 @Composable
-fun PlaceCamera(onFrame: (Bitmap) -> Unit, modifier: Modifier = Modifier) {
+fun PlaceCamera(
+    onFrame: (Bitmap) -> Unit,
+    modifier: Modifier = Modifier,
+    front: Boolean = false,
+    intervalMs: Long = FRAME_INTERVAL_MS
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val latestOnFrame by rememberUpdatedState(onFrame)
@@ -66,7 +71,7 @@ fun PlaceCamera(onFrame: (Bitmap) -> Unit, modifier: Modifier = Modifier) {
             .also { useCase ->
                 useCase.setAnalyzer(executor) { image ->
                     val now = System.currentTimeMillis()
-                    if (now - lastFrameMs >= FRAME_INTERVAL_MS) {
+                    if (now - lastFrameMs >= intervalMs) {
                         lastFrameMs = now
                         runCatching {
                             val frame = image.toBitmap()
@@ -83,7 +88,7 @@ fun PlaceCamera(onFrame: (Bitmap) -> Unit, modifier: Modifier = Modifier) {
                 provider.unbindAll()
                 provider.bindToLifecycle(
                     lifecycleOwner,
-                    CameraSelector.DEFAULT_BACK_CAMERA,
+                    if (front) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA,
                     preview,
                     analysis
                 )

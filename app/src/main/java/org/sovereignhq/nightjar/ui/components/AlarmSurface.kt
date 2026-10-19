@@ -74,8 +74,8 @@ import org.sovereignhq.nightjar.ui.formatClock
  * so silencing the room is never the same thing as switching the alarm off. Starting to switch the
  * alarm off presses it for you: nobody else in the room should have to listen while you do sums.
  *
- * Switching off runs in a fixed order: the check away from the bed if one is registered (a barcode
- * or a photo of a place), then the sums if any are set. The check comes first because it is the step
+ * Switching off runs in a fixed order: the check away from the bed if one is registered (a barcode,
+ * a photo of a place, or a short dance), then the sums if any are set. The check comes first because it is the step
  * that gets you out of bed.
  */
 @Composable
@@ -85,6 +85,7 @@ fun AlarmSurface(
     wakeCode: String,
     wakePhotoRefs: String,
     wakePhotoThreshold: Float,
+    wakeDance: Boolean,
     quietUntilMs: Long,
     onQuieten: () -> Unit,
     onSnooze: () -> Unit,
@@ -103,6 +104,7 @@ fun AlarmSurface(
 
     val needsPhoto = wakePhotoRefs.isNotBlank()
     val needsScan = !needsPhoto && wakeCode.isNotBlank()
+    val needsDance = !needsPhoto && !needsScan && wakeDance
     val afterScan = { if (puzzleDigits > 0) step = OffStep.SUMS else onDismiss() }
 
     Column(
@@ -133,6 +135,14 @@ fun AlarmSurface(
                 onGiveUp = { step = OffStep.HOME }
             )
 
+            OffStep.DANCE -> DanceGate(
+                quietUntilMs = quietUntilMs,
+                onQuieten = onQuieten,
+                onDanced = afterScan,
+                onCannotDance = { step = OffStep.FALLBACK },
+                onGiveUp = { step = OffStep.HOME }
+            )
+
             OffStep.SUMS -> PuzzleGate(
                 digits = puzzleDigits,
                 count = puzzleCount,
@@ -150,7 +160,13 @@ fun AlarmSurface(
                 count = 1,
                 onKeyPress = onQuieten,
                 onSolved = onDismiss,
-                onGiveUp = { step = if (needsPhoto) OffStep.PHOTO else OffStep.SCAN }
+                onGiveUp = {
+                    step = when {
+                        needsPhoto -> OffStep.PHOTO
+                        needsDance -> OffStep.DANCE
+                        else -> OffStep.SCAN
+                    }
+                }
             )
 
             OffStep.HOME -> {
@@ -164,7 +180,7 @@ fun AlarmSurface(
 
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    text = describeSwitchOff(needsScan, needsPhoto, puzzleDigits, puzzleCount),
+                    text = describeSwitchOff(needsScan, needsPhoto, needsDance, puzzleDigits, puzzleCount),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -177,6 +193,7 @@ fun AlarmSurface(
                         when {
                             needsPhoto -> { onQuieten(); step = OffStep.PHOTO }
                             needsScan -> { onQuieten(); step = OffStep.SCAN }
+                            needsDance -> { onQuieten(); step = OffStep.DANCE }
                             puzzleDigits > 0 -> { onQuieten(); step = OffStep.SUMS }
                             else -> onDismiss()
                         }
@@ -187,7 +204,7 @@ fun AlarmSurface(
                     shape = RoundedCornerShape(18.dp)
                 ) {
                     Text(
-                        text = if (needsScan || needsPhoto || puzzleDigits > 0) "Wake me up" else "I'm up",
+                        text = if (needsScan || needsPhoto || needsDance || puzzleDigits > 0) "Wake me up" else "I'm up",
                         style = MaterialTheme.typography.titleLarge
                     )
                 }
@@ -215,16 +232,23 @@ fun AlarmSurface(
     }
 }
 
-private enum class OffStep { HOME, SCAN, PHOTO, SUMS, FALLBACK }
+private enum class OffStep { HOME, SCAN, PHOTO, DANCE, SUMS, FALLBACK }
 
 /** Two digits: mental arithmetic, not a test. */
 private const val FALLBACK_DIGITS = 2
 
-private fun describeSwitchOff(needsScan: Boolean, needsPhoto: Boolean, digits: Int, count: Int): String {
+private fun describeSwitchOff(
+    needsScan: Boolean,
+    needsPhoto: Boolean,
+    needsDance: Boolean,
+    digits: Int,
+    count: Int
+): String {
     val sums = if (digits > 0) PuzzleGenerator.describe(digits, count).lowercase() else null
     val away = when {
         needsPhoto -> "the camera pointed at your place"
         needsScan -> "your wake code scanned"
+        needsDance -> "three dance moves in front of the camera"
         else -> null
     }
     val switchOff = when {
@@ -425,6 +449,56 @@ private fun PhotoGate(
 
 /** About a second of agreement at the camera's 400ms frame rate. */
 private const val MATCH_FRAMES = 3
+
+/**
+ * Three moves in front of the selfie camera. Each finished move buys more silence, since you are
+ * plainly up and doing it.
+ */
+@Composable
+private fun DanceGate(
+    quietUntilMs: Long,
+    onQuieten: () -> Unit,
+    onDanced: () -> Unit,
+    onCannotDance: () -> Unit,
+    onGiveUp: () -> Unit
+) {
+    val context = LocalContext.current
+    val cameraAllowed = remember { hasCameraPermission(context) }
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        if (cameraAllowed) {
+            DanceRoutine(onDone = onDanced, onProgress = onQuieten, modifier = Modifier.fillMaxWidth())
+        } else {
+            Text(
+                "Nightjar is not allowed to use the camera any more, so it cannot see the dance. " +
+                    "Use the sum instead, and allow the camera again in Settings later.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                textAlign = TextAlign.Center
+            )
+        }
+
+        Spacer(Modifier.height(10.dp))
+        QuietButton(quietUntilMs = quietUntilMs, onQuieten = onQuieten)
+        Spacer(Modifier.height(16.dp))
+
+        OutlinedButton(
+            onClick = onCannotDance,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(18.dp)
+        ) {
+            Text(
+                "Can't dance now? Do a sum instead",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        TextAction("Back", onGiveUp)
+    }
+}
 
 @Composable
 private fun TextAction(label: String, onClick: () -> Unit) {
