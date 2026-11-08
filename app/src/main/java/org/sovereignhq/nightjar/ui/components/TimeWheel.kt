@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -49,6 +48,10 @@ import kotlin.math.roundToInt
  *
  * Minute resolution is one minute rather than five. Five would be fewer rows to scroll past, and it
  * would miss the point: the complaint was not being able to land on the number you actually wanted.
+ *
+ * Both wheels loop: past 59 comes 00 again, past 23 comes 00, like a phone's clock. A wheel that
+ * stopped dead at 59 made 06:58 to 07:02 a scroll across the whole hour (Aviv, 8 Nov 2026). The
+ * wheels stay independent: rolling the minutes over does not change the hour.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -109,6 +112,9 @@ fun TimeWheel(
     }
 }
 
+/** How many times each wheel's values repeat. Enough that no thumb reaches either end. */
+private const val LOOPS = 1000
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun Wheel(
@@ -120,19 +126,25 @@ private fun Wheel(
     align: TextAlign,
     onSelected: (Int) -> Unit
 ) {
+    val size = labels.size
+    val total = size * LOOPS
+    // Start in the middle copy, so there are hundreds of turns of room in both directions.
+    val start = (LOOPS / 2) * size
     val state = rememberLazyListState()
     val rowPx = with(LocalDensity.current) { rowHeight.dp.toPx() }
 
-    // Whatever ends up nearest the middle is the value. Read from scroll position rather than from a
-    // tap, so a flick that coasts to a stop still commits.
-    val centred by remember(labels.size) {
+    // Whatever row ends up nearest the middle is the value. Read from scroll position rather than
+    // from a tap, so a flick that coasts to a stop still commits. Rows repeat, so the value is the
+    // row's place within one turn of the wheel.
+    val centredRow by remember(size) {
         derivedStateOf {
             val drift = if (rowPx > 0f) state.firstVisibleItemScrollOffset / rowPx else 0f
-            (state.firstVisibleItemIndex + drift.roundToInt()).coerceIn(0, labels.lastIndex)
+            (state.firstVisibleItemIndex + drift.roundToInt()).coerceIn(0, total - 1)
         }
     }
+    val centred = centredRow % size
 
-    LaunchedEffect(Unit) { state.scrollToItem(selectedIndex) }
+    LaunchedEffect(Unit) { state.scrollToItem(start + selectedIndex) }
 
     LaunchedEffect(centred, state.isScrollInProgress) {
         if (!state.isScrollInProgress && centred != selectedIndex) onSelected(centred)
@@ -142,16 +154,16 @@ private fun Wheel(
         state = state,
         flingBehavior = rememberSnapFlingBehavior(lazyListState = state),
         userScrollEnabled = enabled,
-        // One blank row above and below, so the first and last values can reach the centre.
+        // One blank row above and below, so the centred row lines up with the selection band.
         contentPadding = PaddingValues(vertical = rowHeight.dp),
         modifier = Modifier
             .width(width.dp)
             .height((rowHeight * 3).dp)
     ) {
-        itemsIndexed(labels) { index, label ->
+        items(total) { index ->
             // Rows fade with distance from the centre, which is what makes a flat list read as a
             // wheel without any 3D trickery.
-            val fade = when (abs(index - centred)) {
+            val fade = when (abs(index - centredRow)) {
                 0 -> 1f
                 1 -> 0.38f
                 else -> 0.16f
@@ -163,7 +175,7 @@ private fun Wheel(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = label,
+                    text = labels[index % size],
                     textAlign = align,
                     style = MaterialTheme.typography.displayMedium,
                     color = if (enabled) {
